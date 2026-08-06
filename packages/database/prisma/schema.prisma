@@ -1,0 +1,545 @@
+// --- ENUMS ---
+enum Role {
+  SUPER_ADMIN
+  SYSTEM_ADMIN
+  BRAND_ADMIN
+  CAMPAIGN_MANAGER
+  EDITOR
+  ANALYST
+  VIEW_ONLY
+}
+
+enum BotStatus {
+  DRAFT
+  INSTALLING
+  ACTIVE
+  PASSED
+  INVALID_TOKEN
+  WEBHOOK_ERROR
+  TELEGRAM_UNREACHABLE
+  ARCHIVED
+}
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+  ARCHIVED
+}
+
+enum DeliveryStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  SENT
+  DEFERRED
+  RATE_LIMITED
+  RETRY_SCHEDULED
+  PERMANENTLY_FAILED
+  CANCELLED
+  SKIPPED_FREQUENCY_CAP
+  SKIPPED_QUIET_HOURS
+  SKIPPED_INACTIVE
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --- CORE SYSTEM & MULTI-TENANCY ---
+
+model Brand {
+  id                      String            @id @default(uuid())
+  name                    String
+  code                    String            @unique
+  logoUrl                 String?
+  brandColor              String?           @default("#0088cc")
+  timezone                String            @default("Europe/Belgrade")
+  messageRateLimitPerSec  Int               @default(25)
+  monthlyDeliveryQuota    Int               @default(1000000)
+  isActive                Boolean           @default(true)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  memberships             BrandMembership[]
+  bots                    TelegramBot[]
+  users                   TelegramUser[]
+  templates               MessageTemplate[]
+  campaigns               Campaign[]
+  deliveries              Delivery[]
+  clickLinks              ClickLink[]
+  auditLogs               AuditLog[]
+  broadcastLogs           BroadcastLog[]
+  botGroups               BotGroup[]
+  hourlyMetrics           HourlyMetric[]
+  dailyMetrics            DailyMetric[]
+  segments                SubscriberSegment[]
+  subscriberTags          SubscriberTag[]
+}
+
+model PanelUser {
+  id                  String               @id @default(uuid())
+  firstName           String
+  lastName            String
+  email               String               @unique
+  username            String               @unique
+  passwordHash        String
+  isActive            Boolean              @default(true)
+  twoFactorEnabled    Boolean              @default(false)
+  twoFactorSecret     String?
+  failedLoginAttempts Int                  @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  memberships         BrandMembership[]
+  sessions            PanelUserSession[]
+  resetTokens         PasswordResetToken[]
+  groupMemberships    BotGroupMember[]
+  broadcastLogs       BroadcastLog[]
+}
+
+model BrandMembership {
+  id        String    @id @default(uuid())
+  brandId   String
+  userId    String
+  role      Role      @default(VIEW_ONLY)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  brand     Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, userId])
+}
+
+// --- TELEGRAM STRUCTURE ---
+
+model TelegramBot {
+  id                  String             @id @default(uuid())
+  brandId             String
+  telegramBotId       BigInt             @unique
+  username            String             @unique
+  displayName         String
+  encryptedToken      String             // AES-256-GCM ile şifrelenmiş veri
+  tokenIV             String             // Şifreleme IV değeri
+  tokenFingerprint    String             // Çift token kontrolü için hash
+  webhookPathSecret   String             @unique
+  webhookHeaderSecret String
+  status              BotStatus          @default(DRAFT)
+  startMessage        String?
+  startParseMode      String             @default("HTML") // HTML, MDV2
+  buttonsJson         Json?              // Inline URL butonları
+  disableNotification Boolean            @default(false)  // Sessiz bildirim seçeneği
+  description         String?            // Bot açıklama / not alanı
+  tags                String[]           @default([])     // Bot grupları / etiketleri
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  brand               Brand              @relation(fields: [brandId], references: [id])
+  groupMemberships    BotGroupMember[]
+  subscribers         BotSubscriber[]
+  deliveries          Delivery[]
+  clickLinks          ClickLink[]
+  dailyMetrics        BotDailyMetric[]
+  healthChecks        BotHealthCheck[]
+}
+
+model BotGroup {
+  id          String           @id @default(uuid())
+  brandId     String
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+
+  brand       Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  members     BotGroupMember[]
+}
+
+model BotGroupMember {
+  id        String    @id @default(uuid())
+  groupId   String
+  botId     String
+  userId    String
+  createdAt DateTime  @default(now())
+
+  group     BotGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  bot       TelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, botId, userId])
+}
+
+model TelegramUser {
+  id             String          @id @default(uuid())
+  brandId        String
+  telegramUserId BigInt          @unique
+  firstName      String?
+  lastName       String?
+  username       String?
+  languageCode   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  brand          Brand           @relation(fields: [brandId], references: [id])
+  subscriptions  BotSubscriber[]
+}
+
+model BotSubscriber {
+  id             String         @id @default(uuid())
+  botId          String
+  telegramUserId BigInt
+  chatId         BigInt
+  startParameter String?
+  isBlocked      Boolean        @default(false)
+  subscribedAt   DateTime       @default(now())
+  lastActiveAt   DateTime       @default(now())
+
+  bot            TelegramBot    @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user           TelegramUser   @relation(fields: [telegramUserId], references: [telegramUserId], onDelete: Cascade)
+  deliveries     Delivery[]
+
+  @@unique([botId, telegramUserId])
+  @@index([botId, subscribedAt])
+  @@index([botId, isBlocked])
+}
+
+// --- CAMPAIGNS & TEMPLATES & SCHEDULING ---
+
+model MessageTemplate {
+  id              String   @id @default(uuid())
+  brandId         String
+  name            String
+  description     String?
+  content         String   // Mesaj metni
+  parseMode       String   @default("HTML") // HTML, MARKDOWN_V2
+  mediaType       String   @default("NONE") // NONE, PHOTO, VIDEO, DOCUMENT
+  mediaUrl        String?  // Medya görsel / doküman URL'si
+  telegramFileId  String?  // Telegram'dan dönen file_id saklanır ve tekrar gönderimlerde kullanılır
+  buttonsJson     Json?    // Inline URL butonları
+  variables       String[] @default(["first_name", "last_name", "username", "bot_name", "brand_name"])
+  isActive        Boolean  @default(true)
+  version         Int      @default(1)
+  createdByUserId String?
+  approvalStatus  String   @default("APPROVED") // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  brand           Brand      @relation(fields: [brandId], references: [id])
+  campaigns       Campaign[]
+}
+
+model Campaign {
+  id                   String         @id @default(uuid())
+  brandId              String
+  title                String
+  description          String?
+  type                 String         @default("IMMEDIATE") // IMMEDIATE, SCHEDULED, RECURRING, AB_TEST
+  priority             String         @default("NORMAL")    // HIGH, NORMAL, LOW
+  targetBotIds         String[]       @default([])          // Hedef bot UUID'leri (Boşsa hepsi)
+  excludedBotIds       String[]       @default([])          // Hariç tutulan bot UUID'leri
+  targetSegment        String         @default("ALL")       // ALL, ACTIVE_30D, NEW_SUBSCRIBERS, CUSTOM
+  excludedSegments     String[]       @default([])          // Hariç tutulan segmentler
+  templateId           String?                              // Seçilen ana şablon
+  messageVariations    Json?                                // A/B test varyasyon şablonları
+  rotationType         String         @default("EQUAL_SPLIT") // EQUAL_SPLIT, RANDOM, SEQUENTIAL
+  abTestConfig         Json?                                // A/B test ayarları
+  
+  // Enterprise Scheduling Fields
+  scheduleType         String         @default("IMMEDIATE") // IMMEDIATE, ONCE, HOURLY, EVERY_X_HOURS, DAILY_AT_TIME, DAILY_MULTIPLE_TIMES, WEEKLY_DAYS, WEEKLY, MONTHLY_DAY, CUSTOM_CRON
+  intervalHours        Int?                                 // EVERY_X_HOURS için
+  timeOfDay            String?                              // "14:30" formatında
+  timesOfDay           String[]       @default([])          // ["09:00", "14:00", "20:00"]
+  daysOfWeek           Int[]          @default([])          // [1,3,5] -> Mon, Wed, Fri
+  dayOfMonth           Int?                                 // 1..31
+  isIndefinite         Boolean        @default(true)        // Süresiz tekrar
+  maxExecutions        Int?                                 // Belirli tekrar sayısı sınırı
+  executionCount       Int            @default(0)           // Kaç kez çalıştırıldı
+  customCron           String?                              // İleri düzey kron ifadesi (yalnızca yetkili kullanıcılar)
+  
+  scheduledAt          DateTime?                            // Planlanan tarih (UTC)
+  startsAt             DateTime?                            // Başlangıç tarihi (UTC)
+  endsAt               DateTime?                            // Bitiş tarihi (UTC)
+  nextRunAt            DateTime?                            // Sonraki çalıştırılma zamanı (UTC)
+  lastRunAt            DateTime?                            // Son çalıştırılma zamanı (UTC)
+  quietHoursPolicy     String         @default("SKIP")      // SKIP, DELAY_TO_NEXT_WINDOW, FORCE_SEND
+  frequencyLimitPolicy String         @default("SKIP")      // SKIP, DELAY
+  trackLinks           Boolean        @default(true)        // Takip linkleri oluştur
+  status               CampaignStatus @default(DRAFT)
+  createdById          String?
+  approvedById         String?
+  approvedAt           DateTime?
+  rejectionReason      String?
+  version              Int            @default(1)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  brand                Brand                        @relation(fields: [brandId], references: [id])
+  template             MessageTemplate?             @relation(fields: [templateId], references: [id])
+  runs                 CampaignRun[]
+  deliveries           Delivery[]
+  occurrences          CampaignScheduleOccurrence[]
+}
+
+model CampaignScheduleOccurrence {
+  id            String   @id @default(uuid())
+  campaignId    String
+  occurrenceKey String   // Örn: "2026-07-28T14:00:00Z" (High Availability / Concurrency Koruması)
+  executedAt    DateTime @default(now())
+
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, occurrenceKey])
+  @@index([campaignId])
+}
+
+model CampaignRun {
+  id          String      @id @default(uuid())
+  campaignId  String
+  runIndex    Int         @default(1)
+  startedAt   DateTime    @default(now())
+  completedAt DateTime?
+
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  deliveries  Delivery[]
+}
+
+// --- BROADCAST LOGS (PAYLAŞIM KAYITLARI & GÜVENLİK) ---
+
+model BroadcastLog {
+  id               String      @id @default(uuid())
+  brandId          String
+  userId           String?
+  campaignId       String?
+  templateId       String?
+  title            String
+  messageText      String
+  targetBotCount   Int         @default(1)
+  targetBotNames   String[]    @default([])
+  recipientCount   Int         @default(0)
+  dispatchedAt     DateTime    @default(now())
+
+  brand            Brand       @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user             PanelUser?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([brandId, dispatchedAt])
+}
+
+// --- DELIVERY & TRACKING (HIGH VOLUME TABLES) ---
+
+model Delivery {
+  id             String         @id @default(uuid())
+  brandId        String
+  campaignId     String?
+  campaignRunId  String?
+  botId          String
+  subscriberId   String
+  idempotencyKey String         @unique // campaignRunId + botId + subscriberId kombini
+  status         DeliveryStatus @default(PENDING)
+  retryCount     Int            @default(0)
+  lastError      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  brand          Brand          @relation(fields: [brandId], references: [id])
+  campaign       Campaign?      @relation(fields: [campaignId], references: [id])
+  campaignRun    CampaignRun?   @relation(fields: [campaignRunId], references: [id])
+  bot            TelegramBot    @relation(fields: [botId], references: [id])
+  subscriber     BotSubscriber  @relation(fields: [subscriberId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([brandId, status])
+  @@index([botId, status, createdAt])
+  @@index([brandId, createdAt])
+}
+
+model ClickLink {
+  id          String       @id @default(uuid())
+  brandId     String
+  botId       String
+  shortCode   String       @unique
+  targetUrl   String
+  createdAt   DateTime     @default(now())
+
+  brand       Brand        @relation(fields: [brandId], references: [id])
+  bot         TelegramBot  @relation(fields: [botId], references: [id])
+  events      ClickEvent[]
+}
+
+model ClickEvent {
+  id          String    @id @default(uuid())
+  linkId      String
+  deviceClass String    @default("UNKNOWN")
+  createdAt   DateTime  @default(now())
+
+  link        ClickLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+}
+
+model HourlyMetric {
+  id          String   @id @default(uuid())
+  brandId     String
+  date        DateTime
+  totalSent   Int      @default(0)
+  totalFailed Int      @default(0)
+  totalClicks Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  brand       Brand    @relation(fields: [brandId], references: [id])
+
+  @@unique([brandId, date])
+}
+
+model DailyMetric {
+  id          String   @id @default(uuid())
+  brandId     String
+  date        DateTime
+  totalSent   Int      @default(0)
+  totalFailed Int      @default(0)
+  totalClicks Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  brand       Brand    @relation(fields: [brandId], references: [id])
+
+  @@unique([brandId, date])
+}
+
+// --- SYSTEM LOGS & UTILS ---
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  brandId       String?
+  userId        String?
+  action        String
+  resourceType  String
+  resourceId    String?
+  payloadBefore String?  // JSON string (Hassas veriler sansürlenmiş)
+  payloadAfter  String?  // JSON string (Hassas veriler sansürlenmiş)
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  brand         Brand?   @relation(fields: [brandId], references: [id])
+}
+
+model PanelUserSession {
+  id           String    @id @default(uuid())
+  userId       String
+  refreshToken String    @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+
+  user         PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BotDailyMetric {
+  id                 String      @id @default(uuid())
+  botId              String
+  date               DateTime
+  totalSubscribers   Int         @default(0)
+  newSubscribers     Int         @default(0)
+  blockedSubscribers Int         @default(0)
+  totalSent          Int         @default(0)
+  totalFailed        Int         @default(0)
+  totalClicks        Int         @default(0)
+  createdAt          DateTime    @default(now())
+
+  bot                TelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, date])
+  @@index([botId, date])
+}
+
+model BotHealthCheck {
+  id                 String       @id @default(uuid())
+  botId              String
+  status             String       @default("HEALTHY") // HEALTHY, WARNING, CRITICAL, DISABLED, UNKNOWN
+  isTokenValid       Boolean      @default(true)
+  isGetMeSuccess     Boolean      @default(true)
+  isWebhookValid     Boolean      @default(true)
+  isSecretValid      Boolean      @default(true)
+  pendingUpdateCount Int          @default(0)
+  lastWebhookAt      DateTime?
+  lastSuccessAt      DateTime?
+  lastError          String?
+  errorRate1h        Float        @default(0.0)
+  successRate24h     Float        @default(100.0)
+  queueLatencyMs     Int          @default(0)
+  rateLimitStatus    String       @default("NORMAL") // NORMAL, RATE_LIMITED
+  checkedAt          DateTime     @default(now())
+
+  bot                TelegramBot  @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId, checkedAt])
+  @@index([status])
+}
+
+model SubscriberSegment {
+  id          String   @id @default(uuid())
+  brandId     String
+  name        String
+  description String?
+  rulesJson   Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model SubscriberTag {
+  id          String   @id @default(uuid())
+  brandId     String
+  name        String   @unique
+  color       String   @default("#38bdf8")
+  createdAt   DateTime @default(now())
+
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  category    String   @default("GENERAL")
+  updatedAt   DateTime @updatedAt
+}
+
+model SystemAlert {
+  id          String   @id @default(uuid())
+  level       String   @default("INFO") // INFO, WARNING, ERROR, CRITICAL
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model BackupLog {
+  id          String   @id @default(uuid())
+  fileName    String
+  sizeBytes   BigInt   @default(0)
+  status      String   @default("SUCCESS")
+  createdAt   DateTime @default(now())
+}
