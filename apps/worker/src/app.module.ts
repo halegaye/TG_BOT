@@ -7,13 +7,28 @@ import { BulkImportProcessor } from './processors/bulk-import.processor';
 import { RedisRateLimiterService } from './rate-limiter/redis-limiter.service';
 import { EncryptionService } from '@tg-bot/shared';
 
+function parseRedisConnection() {
+  if (process.env.REDIS_URL) {
+    try {
+      const url = new URL(process.env.REDIS_URL);
+      return {
+        host: url.hostname,
+        port: parseInt(url.port || '6379', 10),
+        password: url.password ? decodeURIComponent(url.password) : undefined,
+      };
+    } catch (_) {}
+  }
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  };
+}
+
 @Module({
   imports: [
     BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-      },
+      connection: parseRedisConnection(),
     }),
     BullModule.registerQueue(
       { name: 'telegram-webhook-events' },
