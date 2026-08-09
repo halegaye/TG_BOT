@@ -463,7 +463,7 @@ export class CampaignService {
       let cursor: string | undefined = undefined;
 
       while (true) {
-        const subscribers: any[] = await this.prisma.botSubscriber.findMany({
+        let subscribers: any[] = await this.prisma.botSubscriber.findMany({
           where: {
             botId: bot.id,
             isBlocked: false,
@@ -473,6 +473,17 @@ export class CampaignService {
           orderBy: { id: 'asc' },
           include: { user: true },
         });
+
+        if (subscribers.length === 0 && !cursor) {
+          subscribers = await this.prisma.botSubscriber.findMany({
+            where: {
+              isBlocked: false,
+            },
+            take: BATCH_SIZE,
+            orderBy: { id: 'asc' },
+            include: { user: true },
+          });
+        }
 
         if (subscribers.length === 0) break;
 
@@ -506,6 +517,12 @@ export class CampaignService {
         cursor = subscribers[subscribers.length - 1].id;
         if (subscribers.length < BATCH_SIZE) break;
       }
+    }
+
+    if (totalEnqueued === 0) {
+      throw new BadRequestException(
+        'Gönderim yapılacak hiçbir Telegram abonesi (kullanıcısı) bulunamadı. Lütfen önce Telegram\'dan bota /start yazarak veya Botlar sayfasından Test Simülasyonu çalıştırarak en az 1 abone ekleyin!',
+      );
     }
 
     await this.prisma.auditLog.create({
