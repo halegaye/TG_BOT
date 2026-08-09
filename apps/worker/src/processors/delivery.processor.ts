@@ -3,7 +3,7 @@ import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RedisRateLimiterService } from '../rate-limiter/redis-limiter.service';
-import { EncryptionService, sanitizeMediaUrl } from '@tg-bot/shared';
+import { EncryptionService, sanitizeMediaUrl, interpolateTemplate, buildInlineKeyboard } from '@tg-bot/shared';
 import { Redis } from 'ioredis';
 
 @Processor('telegram-send')
@@ -109,14 +109,36 @@ export class DeliveryProcessor extends WorkerHost {
         return { status: 'failed', reason: 'token_decryption_error' };
       }
 
-      // 5. Telegram Endpoint & Payload Hazırla
+      // 5. Abone ve Kullanıcı Bilgilerini Çek
+      const subscriber = subscriberId
+        ? await this.prisma.botSubscriber.findUnique({
+            where: { id: subscriberId },
+            include: { user: true },
+          })
+        : null;
+
+      // 6. Şablon Değişkenlerini ({{first_name}}, {{brand_name}} vb.) Dönüştür
+      const finalMessageText = interpolateTemplate(text || '', {
+        first_name: subscriber?.user?.firstName || subscriber?.user?.username || 'Değerli Kullanıcımız',
+        last_name: subscriber?.user?.lastName || '',
+        username: subscriber?.user?.username ? `@${subscriber.user.username}` : '',
+        bot_name: bot.username || '',
+        brand_name: bot.brand?.name || 'Sistem',
+      });
+
+      // 7. Telegram Endpoint & Payload Hazırla
       let telegramEndpoint = 'sendMessage';
       const payload: any = {
         chat_id: chatId.toString(),
       };
 
       if (parseMode) payload.parse_mode = parseMode;
-      if (replyMarkup) payload.reply_markup = replyMarkup;
+
+      let finalReplyMarkup = replyMarkup;
+      if (!finalReplyMarkup && job.data.buttons && Array.isArray(job.data.buttons) && job.data.buttons.length > 0) {
+        finalReplyMarkup = buildInlineKeyboard(job.data.buttons);
+      }
+      if (finalReplyMarkup) payload.reply_markup = finalReplyMarkup;
 
       const cleanMediaUrl = sanitizeMediaUrl(mediaUrl);
       const mediaRef = inputTelegramFileId || cleanMediaUrl;
@@ -124,17 +146,17 @@ export class DeliveryProcessor extends WorkerHost {
       if (mediaType === 'PHOTO' && mediaRef) {
         telegramEndpoint = 'sendPhoto';
         payload.photo = mediaRef;
-        if (text) payload.caption = text;
+        if (finalMessageText) payload.caption = finalMessageText;
       } else if (mediaType === 'VIDEO' && mediaRef) {
         telegramEndpoint = 'sendVideo';
         payload.video = mediaRef;
-        if (text) payload.caption = text;
+        if (finalMessageText) payload.caption = finalMessageText;
       } else if (mediaType === 'DOCUMENT' && mediaRef) {
         telegramEndpoint = 'sendDocument';
         payload.document = mediaRef;
-        if (text) payload.caption = text;
+        if (finalMessageText) payload.caption = finalMessageText;
       } else {
-        payload.text = text || 'Kampanya Mesajı';
+        payload.text = finalMessageText || 'Kampanya Mesajı';
       }
 
       this.logger.log(`📡 [SENDING TELEGRAM] Bot [@${bot.username}] -> ChatId [${chatId}] Endpoint [${telegramEndpoint}]...`);
