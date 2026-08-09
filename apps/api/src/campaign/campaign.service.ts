@@ -241,9 +241,11 @@ export class CampaignService {
   }
 
   async estimateAudience(brandId: string, targetBotIds?: string[], excludedBotIds?: string[]) {
-    let botWhere: any = { brandId, status: 'ACTIVE' };
+    let botWhere: any = {};
     if (targetBotIds && targetBotIds.length > 0) {
-      botWhere.id = { in: targetBotIds };
+      botWhere = { id: { in: targetBotIds } };
+    } else if (brandId) {
+      botWhere = { brandId };
     }
     if (excludedBotIds && excludedBotIds.length > 0) {
       botWhere.id = { ...botWhere.id, notIn: excludedBotIds };
@@ -404,16 +406,32 @@ export class CampaignService {
     const effectiveBrandId = campaign.brandId || brandId;
 
     let targetBotIds: string[] = campaign.targetBotIds || [];
-    let botWhere: any = { brandId: effectiveBrandId, status: 'ACTIVE' };
+    let botWhere: any = {};
 
     if (targetBotIds.length > 0) {
-      botWhere.id = { in: targetBotIds };
+      botWhere = { id: { in: targetBotIds } };
+    } else if (effectiveBrandId) {
+      botWhere = { brandId: effectiveBrandId };
     }
 
-    const botsToTarget = await this.prisma.telegramBot.findMany({
-      where: botWhere,
+    let botsToTarget = await this.prisma.telegramBot.findMany({
+      where: { ...botWhere, status: 'ACTIVE' },
       select: { id: true, username: true, encryptedToken: true, tokenIV: true },
     });
+
+    if (botsToTarget.length === 0 && targetBotIds.length > 0) {
+      botsToTarget = await this.prisma.telegramBot.findMany({
+        where: botWhere,
+        select: { id: true, username: true, encryptedToken: true, tokenIV: true },
+      });
+
+      if (botsToTarget.length > 0) {
+        await this.prisma.telegramBot.updateMany({
+          where: { id: { in: botsToTarget.map((b) => b.id) } },
+          data: { status: 'ACTIVE' },
+        });
+      }
+    }
 
     if (botsToTarget.length === 0) {
       throw new BadRequestException('Kampanya gönderimi için hedeflenecek aktif Telegram botu bulunamadı.');
