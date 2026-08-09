@@ -39,7 +39,18 @@ export default function LoginPage() {
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = {};
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(
+          res.status === 502
+            ? 'Sunucu servisi başlatılıyor (502). Lütfen 10 saniye bekleyip tekrar deneyin.'
+            : `Sunucu beklenmeyen bir yanıt döndürdü (${res.status}): ${text.substring(0, 100)}`
+        );
+      }
 
       if (!res.ok) {
         throw new Error(data.message || 'Giriş başarısız.');
