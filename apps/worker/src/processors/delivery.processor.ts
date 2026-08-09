@@ -38,118 +38,104 @@ export class DeliveryProcessor extends WorkerHost {
       templateId,
     } = job.data;
 
-    this.logger.log(`🚀 [DELIVERY JOB PROCESSING] BotId [${botId}] -> ChatId [${chatId}] (SubscriberId: ${subscriberId})`);
+    const actualIdempotencyKey = job.data.idempotencyKey || `${campaignRunId}:${botId}:${subscriberId}`;
 
-    // 0. Acil Durum Durdurma (Emergency Stop) Kontrolü
-    const isGlobalStopped = await this.redis.get('system:emergency_stop:global');
-    const isBrandStopped = brandId ? await this.redis.get(`system:emergency_stop:brand:${brandId}`) : null;
+    this.logger.log(`🚀 [DELIVERY JOB PROCESSING] BotId [${botId}] -> ChatId [${chatId}] (Key: ${actualIdempotencyKey})`);
 
-    if (isGlobalStopped === 'true' || isBrandStopped === 'true') {
-      this.logger.warn(`Acil durum durdurma aktif! İş durduruldu. BrandId: ${brandId}`);
-      throw new Error('Acil durum durdurma aktif. Gönderim ertelendi.');
-    }
-
-    // 1. Benzersiz Idempotency Key Üret
-    const idempotencyKey = `${campaignRunId}:${botId}:${subscriberId}`;
-
-    // 2. Double-Check: Veritabanında bu kayıt zaten başarılı gönderildi mi?
-    const existingDelivery = await this.prisma.delivery.findUnique({
-      where: { idempotencyKey },
-    });
-
-    if (existingDelivery && (existingDelivery.status === 'SENT' || existingDelivery.status === 'SKIPPED_FREQUENCY_CAP')) {
-      this.logger.warn(`Job atlandı! Mükerrer gönderim engellendi: ${idempotencyKey}`);
-      return { status: 'skipped', reason: 'idempotency_match' };
-    }
-
-    // 3. Veritabanında Durumu PROCESSING Olarak Kaydet veya Güncelle
-    const deliveryRecord = await this.prisma.delivery.upsert({
-      where: { idempotencyKey },
-      update: { status: 'PROCESSING' },
-      create: {
-        brandId: brandId,
-        campaignId: campaignId || null,
-        campaignRunId: campaignRunId || null,
-        botId,
-        subscriberId,
-        idempotencyKey,
-        status: 'PROCESSING',
-      },
-    });
-
-    // 4. Bot Bazlı Hız Sınırı Kontrolü
-    const bot = await this.prisma.telegramBot.findUnique({
-      where: { id: botId },
-      include: { brand: true },
-    });
-
-    if (!bot) {
-      await this.prisma.delivery.update({
-        where: { id: deliveryRecord.id },
-        data: { status: 'PERMANENTLY_FAILED', lastError: 'Bot bulunamadı.' },
-      });
-      return { status: 'failed', reason: 'bot_not_found' };
-    }
-
-    const limit = bot.brand?.messageRateLimitPerSec || 25;
-    const rateCheck = await this.rateLimiter.checkRateLimit(botId, limit);
-
-    if (!rateCheck.allowed) {
-      await this.prisma.delivery.update({
-        where: { id: deliveryRecord.id },
-        data: { status: 'RATE_LIMITED', lastError: 'Redis rate limit backoff triggered.' },
-      });
-      throw new Error(`Rate limit hit. Retrying after ${rateCheck.retryAfterMs}ms`);
-    }
-
-    // 5. Bot Token'ını Çöz
-    let rawToken: string;
-    try {
-      rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
-    } catch (decryptErr: any) {
-      this.logger.error(
-        `🔑 [TOKEN DECRYPTION ERROR] Bot [${bot.username || botId}] için şifreli token çözülemedi! Hata: ${decryptErr.message}`,
-      );
-      await this.prisma.delivery.update({
-        where: { id: deliveryRecord.id },
-        data: { status: 'PERMANENTLY_FAILED', lastError: `Token decryption error: ${decryptErr.message}` },
-      });
-      return { status: 'failed', reason: 'token_decryption_error' };
-    }
-
-    // 6. Telegram Endpoint ve Payload Seçimi (Medya / Düz Metin)
-    let telegramEndpoint = 'sendMessage';
-    const payload: any = {
-      chat_id: chatId.toString(),
-    };
-
-    if (parseMode) payload.parse_mode = parseMode;
-    if (replyMarkup) payload.reply_markup = replyMarkup;
-
-    // Resim/Medya Bağlantısı Normalizasyonu (Imgur albüm/sayfa bağlantılarını doğrudan CDN linkine dönüştürür)
-    const cleanMediaUrl = sanitizeMediaUrl(mediaUrl);
-    const mediaRef = inputTelegramFileId || cleanMediaUrl;
-
-    if (mediaType === 'PHOTO' && mediaRef) {
-      telegramEndpoint = 'sendPhoto';
-      payload.photo = mediaRef;
-      if (text) payload.caption = text;
-    } else if (mediaType === 'VIDEO' && mediaRef) {
-      telegramEndpoint = 'sendVideo';
-      payload.video = mediaRef;
-      if (text) payload.caption = text;
-    } else if (mediaType === 'DOCUMENT' && mediaRef) {
-      telegramEndpoint = 'sendDocument';
-      payload.document = mediaRef;
-      if (text) payload.caption = text;
-    } else {
-      payload.text = text || '';
-    }
+    let deliveryRecord: any = null;
 
     try {
-      this.logger.log(
-        `🚀 [SENDING MSG] Bot [@${bot.username}] -> ChatId [${chatId}] Endpoint [${telegramEndpoint}] MediaRef [${mediaRef || 'none'}]...`,
-      );
+      // 0. Acil Durum Durdurma Kontrolü
+      const isGlobalStopped = await this.redis.get('system:emergency_stop:global');
+      const isBrandStopped = brandId ? await this.redis.get(`system:emergency_stop:brand:${brandId}`) : null;
+
+      if (isGlobalStopped === 'true' || isBrandStopped === 'true') {
+        this.logger.warn(`Acil durum durdurma aktif! İş durduruldu. BrandId: ${brandId}`);
+        throw new Error('Acil durum durdurma aktif. Gönderim ertelendi.');
+      }
+
+      // 1. Mükerrer Gönderim Kontrolü
+      const existingDelivery = await this.prisma.delivery.findUnique({
+        where: { idempotencyKey: actualIdempotencyKey },
+      });
+
+      if (existingDelivery && (existingDelivery.status === 'SENT' || existingDelivery.status === 'SKIPPED_FREQUENCY_CAP')) {
+        this.logger.warn(`Job atlandı! Mükerrer gönderim engellendi: ${actualIdempotencyKey}`);
+        return { status: 'skipped', reason: 'idempotency_match' };
+      }
+
+      // 2. Veritabanında Durumu PROCESSING Yap
+      deliveryRecord = await this.prisma.delivery.upsert({
+        where: { idempotencyKey: actualIdempotencyKey },
+        update: { status: 'PROCESSING' },
+        create: {
+          brandId: brandId,
+          campaignId: campaignId || null,
+          campaignRunId: campaignRunId || null,
+          botId,
+          subscriberId,
+          idempotencyKey: actualIdempotencyKey,
+          status: 'PROCESSING',
+        },
+      });
+
+      // 3. Bot Bilgilerini Getir
+      const bot = await this.prisma.telegramBot.findUnique({
+        where: { id: botId },
+        include: { brand: true },
+      });
+
+      if (!bot) {
+        this.logger.error(`❌ [DELIVERY ERROR] Bot bulunamadı: ${botId}`);
+        await this.prisma.delivery.update({
+          where: { id: deliveryRecord.id },
+          data: { status: 'PERMANENTLY_FAILED', lastError: 'Bot bulunamadı.' },
+        });
+        return { status: 'failed', reason: 'bot_not_found' };
+      }
+
+      // 4. Token Çöz
+      let rawToken: string;
+      try {
+        rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+      } catch (decryptErr: any) {
+        this.logger.error(`❌ [TOKEN DECRYPTION ERROR] Bot [${bot.username}] token çözülemedi: ${decryptErr.message}`);
+        await this.prisma.delivery.update({
+          where: { id: deliveryRecord.id },
+          data: { status: 'PERMANENTLY_FAILED', lastError: `Token decryption error: ${decryptErr.message}` },
+        });
+        return { status: 'failed', reason: 'token_decryption_error' };
+      }
+
+      // 5. Telegram Endpoint & Payload Hazırla
+      let telegramEndpoint = 'sendMessage';
+      const payload: any = {
+        chat_id: chatId.toString(),
+      };
+
+      if (parseMode) payload.parse_mode = parseMode;
+      if (replyMarkup) payload.reply_markup = replyMarkup;
+
+      const cleanMediaUrl = sanitizeMediaUrl(mediaUrl);
+      const mediaRef = inputTelegramFileId || cleanMediaUrl;
+
+      if (mediaType === 'PHOTO' && mediaRef) {
+        telegramEndpoint = 'sendPhoto';
+        payload.photo = mediaRef;
+        if (text) payload.caption = text;
+      } else if (mediaType === 'VIDEO' && mediaRef) {
+        telegramEndpoint = 'sendVideo';
+        payload.video = mediaRef;
+        if (text) payload.caption = text;
+      } else if (mediaType === 'DOCUMENT' && mediaRef) {
+        telegramEndpoint = 'sendDocument';
+        payload.document = mediaRef;
+        if (text) payload.caption = text;
+      } else {
+        payload.text = text || 'Kampanya Mesajı';
+      }
+
+      this.logger.log(`📡 [SENDING TELEGRAM] Bot [@${bot.username}] -> ChatId [${chatId}] Endpoint [${telegramEndpoint}]...`);
 
       const res = await fetch(`https://api.telegram.org/bot${rawToken}/${telegramEndpoint}`, {
         method: 'POST',
@@ -158,7 +144,16 @@ export class DeliveryProcessor extends WorkerHost {
       });
 
       const data = (await res.json()) as any;
+      this.logger.log(`📩 [TELEGRAM RESPONSE] Status: ${res.status}, OK: ${data.ok}, Desc: ${data.description || 'N/A'}`);
 
+      if (data.ok) {
+        this.logger.log(`✅ [CAMPAIGN SENT SUCCESS] Bot [@${bot.username}] -> ChatId [${chatId}] MESAJ İLETİLDİ!`);
+        await this.prisma.delivery.update({
+          where: { id: deliveryRecord.id },
+          data: { status: 'SENT', lastError: null },
+        });
+        return { status: 'sent' };
+      }
       // Telegram 429 Hata Yönetimi
       if (res.status === 429) {
         const retryAfter = data.parameters?.retry_after || 5;
@@ -293,10 +288,12 @@ export class DeliveryProcessor extends WorkerHost {
       return { status: 'sent' };
     } catch (error: any) {
       this.logger.error(`❌ [DELIVERY ERROR] BotId: ${botId} -> ChatId: ${chatId}: ${error.message}`);
-      await this.prisma.delivery.update({
-        where: { id: deliveryRecord.id },
-        data: { status: 'RETRY_SCHEDULED', lastError: error.message },
-      });
+      if (deliveryRecord?.id) {
+        await this.prisma.delivery.update({
+          where: { id: deliveryRecord.id },
+          data: { status: 'RETRY_SCHEDULED', lastError: error.message },
+        });
+      }
       throw error;
     }
   }
