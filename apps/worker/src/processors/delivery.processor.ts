@@ -89,7 +89,7 @@ export class DeliveryProcessor extends WorkerHost {
       return { status: 'failed', reason: 'bot_not_found' };
     }
 
-    const limit = bot.brand.messageRateLimitPerSec || 25;
+    const limit = bot.brand?.messageRateLimitPerSec || 25;
     const rateCheck = await this.rateLimiter.checkRateLimit(botId, limit);
 
     if (!rateCheck.allowed) {

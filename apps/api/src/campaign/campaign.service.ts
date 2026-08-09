@@ -496,7 +496,7 @@ export class CampaignService {
               campaignRunId: campaignRun.id,
               botId: bot.id,
               subscriberId: sub.id,
-              chatId: sub.chatId.toString(),
+              chatId: sub.chatId ? sub.chatId.toString() : (sub.user?.telegramUserId ? sub.user.telegramUserId.toString() : ''),
               text: textToUse,
               parseMode: template?.parseMode || 'HTML',
               mediaType: template?.mediaType || 'NONE',
