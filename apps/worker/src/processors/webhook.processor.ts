@@ -206,7 +206,7 @@ export class WebhookProcessor extends WorkerHost {
           // Fallback: Parse mode veya medya yükleme hatası varsa düz metin olarak tekrar dene
           if (telegramEndpoint !== 'sendMessage' || tgData.description?.includes('parse') || tgData.error_code === 400) {
             this.logger.warn(`⚠️ [FALLBACK ATTEMPT] (${telegramEndpoint}) hatası nedeniyle Düz Metin (sendMessage) olarak tekrar deneniyor...`);
-            const fallbackPayload = {
+            const fallbackPayload: any = {
               chat_id: chatId,
               text: formattedMessage,
             };
