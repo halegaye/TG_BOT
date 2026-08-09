@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Lock, CheckCircle2, ArrowRight, Smartphone } from 'lucide-react';
+import Link from 'next/link';
 import { getApiBaseUrl } from '@/lib/api';
 
 function ResetPasswordForm() {

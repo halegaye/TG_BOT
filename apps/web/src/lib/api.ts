@@ -200,7 +200,7 @@ export const queueBulkImport = queueBulkImportBots;
 
 export function getBulkImportFailedCsvUrl(importId: string): string {
   const token = getStoredToken();
-  return `${API_BASE_URL}/api/v1/bots/bulk-import/${importId}/failed-csv${token ? `?token=${token}` : ''}`;
+  return `${getApiBaseUrl()}/bots/bulk-import/${importId}/failed-csv${token ? `?token=${token}` : ''}`;
 }
 
 export async function updateStartMessage(
