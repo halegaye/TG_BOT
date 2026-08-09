@@ -1,11 +1,11 @@
 export function getApiBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
+  if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
   if (typeof window !== 'undefined') {
     return '/api/v1';
   }
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+  return 'http://localhost:4000/api/v1';
 }
 
 export function getStoredToken(): string | null {
@@ -49,7 +49,12 @@ export async function fetchApi<T = any>(
   }
 
   const baseUrl = getApiBaseUrl();
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  if (baseUrl.endsWith('/api/v1') && cleanEndpoint.startsWith('/api/v1')) {
+    cleanEndpoint = cleanEndpoint.substring(7);
+  }
+
   const res = await fetch(`${baseUrl}${cleanEndpoint}`, {
     ...options,
     headers,
