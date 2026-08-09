@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ShieldCheck, User, ArrowRight, KeyRound, Smartphone } from 'lucide-react';
 import Link from 'next/link';
-import { setStoredToken, setStoredBrandId } from '@/lib/api';
+import { setStoredToken, setStoredBrandId, getApiBaseUrl } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState('admin@platform.com');
-  const [password, setPassword] = useState('AdminPassword123!');
+  const [identifier, setIdentifier] = useState('admin@enterprise.com');
+  const [password, setPassword] = useState('SuperAdminSecret2026!');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [error, setError] = useState('');
@@ -33,7 +33,7 @@ export default function LoginPage() {
         ...(requiresTwoFactor ? { twoFactorCode } : {}),
       };
 
-      const res = await fetch('http://localhost:4000/api/v1/auth/login', {
+      const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

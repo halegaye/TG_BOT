@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Lock, CheckCircle2, ArrowRight, Smartphone } from 'lucide-react';
-import Link from 'next/link';
+import { getApiBaseUrl } from '@/lib/api';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -23,7 +23,7 @@ function ResetPasswordForm() {
   useEffect(() => {
     async function check2FA() {
       try {
-        const res = await fetch('http://localhost:4000/api/v1/auth/check-reset-2fa', {
+        const res = await fetch(`${getApiBaseUrl()}/auth/check-reset-2fa`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: emailParam || undefined, token: token || undefined }),
@@ -62,7 +62,7 @@ function ResetPasswordForm() {
     setError('');
 
     try {
-      const res = await fetch('http://localhost:4000/api/v1/auth/reset-password', {
+      const res = await fetch(`${getApiBaseUrl()}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
