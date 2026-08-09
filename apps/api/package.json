@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
     "build": "tsc",
+    "start": "node dist/main.js",
     "lint": "echo 'lint api'",
     "create-super-admin": "ts-node src/cli/create-super-admin.ts",
     "poll:telegram": "ts-node src/cli/dev-poll-telegram.ts"
