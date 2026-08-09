@@ -85,7 +85,11 @@ export default function CampaignWizardPage() {
   // 1. Fetch Real Bots from DB
   const { data: bots = [], isLoading: isLoadingBots } = useQuery({
     queryKey: ['bots', activeBrandId],
-    queryFn: () => fetchBots(activeBrandId),
+    queryFn: async () => {
+      const brandBots = await fetchBots(activeBrandId);
+      if (Array.isArray(brandBots) && brandBots.length > 0) return brandBots;
+      return fetchBots();
+    },
   });
 
   // 2. Fetch Templates
@@ -659,9 +663,16 @@ export default function CampaignWizardPage() {
 
                 <button
                   type="button"
-                  disabled={dispatchMutation.isPending || targetBots.length === 0}
-                  onClick={() => dispatchMutation.mutate()}
-                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-7 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 shadow-lg shadow-emerald-600/30"
+                  disabled={dispatchMutation.isPending}
+                  onClick={() => {
+                    if (!title.trim()) {
+                      setError('Lütfen önce 1. Adımda Kampanya Başlığı giriniz.');
+                      return;
+                    }
+                    setError('');
+                    dispatchMutation.mutate();
+                  }}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-7 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 shadow-lg shadow-emerald-600/30 cursor-pointer"
                 >
                   <Send className="h-5 w-5" />
                   {dispatchMutation.isPending
