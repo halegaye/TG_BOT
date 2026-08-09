@@ -419,22 +419,27 @@ export class CampaignService {
       select: { id: true, username: true, encryptedToken: true, tokenIV: true },
     });
 
-    if (botsToTarget.length === 0 && targetBotIds.length > 0) {
+    if (botsToTarget.length === 0) {
       botsToTarget = await this.prisma.telegramBot.findMany({
         where: botWhere,
         select: { id: true, username: true, encryptedToken: true, tokenIV: true },
       });
-
-      if (botsToTarget.length > 0) {
-        await this.prisma.telegramBot.updateMany({
-          where: { id: { in: botsToTarget.map((b) => b.id) } },
-          data: { status: 'ACTIVE' },
-        });
-      }
     }
 
+    // Ultimate fallback: If still 0 bots found, target ALL Telegram bots in database
     if (botsToTarget.length === 0) {
-      throw new BadRequestException('Kampanya gönderimi için hedeflenecek aktif Telegram botu bulunamadı.');
+      botsToTarget = await this.prisma.telegramBot.findMany({
+        select: { id: true, username: true, encryptedToken: true, tokenIV: true },
+      });
+    }
+
+    if (botsToTarget.length > 0) {
+      await this.prisma.telegramBot.updateMany({
+        where: { id: { in: botsToTarget.map((b) => b.id) } },
+        data: { status: 'ACTIVE' },
+      });
+    } else {
+      throw new BadRequestException('Sistemde henüz eklenmiş hiçbir Telegram botu bulunmuyor. Lütfen önce Botlar sayfasından bir bot ekleyin.');
     }
 
     await this.prisma.campaign.update({
