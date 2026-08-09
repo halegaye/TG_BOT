@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { KeyRound, Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
 import { getApiBaseUrl } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
