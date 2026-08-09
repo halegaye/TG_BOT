@@ -14,14 +14,14 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 import * as crypto from 'crypto';
 
-@Controller(['webhook', 'api/v1/webhook'])
+@Controller()
 export class WebhookController {
   constructor(
     @InjectQueue('telegram-webhook-events') private webhookQueue: Queue,
     private prisma: PrismaService,
   ) {}
 
-  @Post(':pathSecret')
+  @Post(['webhook/:pathSecret', 'api/v1/webhook/:pathSecret'])
   @HttpCode(HttpStatus.OK)
   async handleWebhook(
     @Param('pathSecret') pathSecret: string,
@@ -71,7 +71,7 @@ export class WebhookController {
   }
 
   // --- DEVELOPER WEBHOOK SIMULATOR ENDPOINT ---
-  @Post('test-simulate/:botId')
+  @Post(['webhook/test-simulate/:botId', 'api/v1/webhook/test-simulate/:botId'])
   @HttpCode(HttpStatus.OK)
   async simulateWebhook(
     @Param('botId') botId: string,
