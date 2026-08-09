@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@9.7.0 --activate
 FROM base AS builder
 WORKDIR /app
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 RUN pnpm --filter @tg-bot/database exec prisma generate
 RUN pnpm build
 

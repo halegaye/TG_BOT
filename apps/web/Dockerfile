@@ -4,7 +4,7 @@ RUN corepack enable && corepack prepare pnpm@9.7.0 --activate
 FROM base AS builder
 WORKDIR /app
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN pnpm --filter @tg-bot/web build
