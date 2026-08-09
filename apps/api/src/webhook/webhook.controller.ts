@@ -14,7 +14,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 import * as crypto from 'crypto';
 
-@Controller('webhook')
+@Controller(['webhook', 'api/v1/webhook'])
 export class WebhookController {
   constructor(
     @InjectQueue('telegram-webhook-events') private webhookQueue: Queue,
