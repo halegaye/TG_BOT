@@ -54,7 +54,24 @@ export class DeliveryProcessor extends WorkerHost {
         throw new Error('Acil durum durdurma aktif. Gönderim ertelendi.');
       }
 
-      // 1. Mükerrer Gönderim Kontrolü
+      // 1. Bot ve Marka Bilgilerini Getir
+      const bot = await this.prisma.telegramBot.findUnique({
+        where: { id: botId },
+        include: { brand: true },
+      });
+
+      if (!bot) {
+        this.logger.error(`❌ [DELIVERY ERROR] Bot bulunamadı: ${botId}`);
+        return { status: 'failed', reason: 'bot_not_found' };
+      }
+
+      let effectiveBrandId = brandId || bot.brandId;
+      if (!effectiveBrandId) {
+        const firstBrand = await this.prisma.brand.findFirst();
+        effectiveBrandId = firstBrand?.id;
+      }
+
+      // 2. Mükerrer Gönderim Kontrolü
       const existingDelivery = await this.prisma.delivery.findUnique({
         where: { idempotencyKey: actualIdempotencyKey },
       });
@@ -64,12 +81,12 @@ export class DeliveryProcessor extends WorkerHost {
         return { status: 'skipped', reason: 'idempotency_match' };
       }
 
-      // 2. Veritabanında Durumu PROCESSING Yap
+      // 3. Veritabanında Durumu PROCESSING Yap
       deliveryRecord = await this.prisma.delivery.upsert({
         where: { idempotencyKey: actualIdempotencyKey },
         update: { status: 'PROCESSING' },
         create: {
-          brandId: brandId,
+          brandId: effectiveBrandId,
           campaignId: campaignId || null,
           campaignRunId: campaignRunId || null,
           botId,
@@ -78,21 +95,6 @@ export class DeliveryProcessor extends WorkerHost {
           status: 'PROCESSING',
         },
       });
-
-      // 3. Bot Bilgilerini Getir
-      const bot = await this.prisma.telegramBot.findUnique({
-        where: { id: botId },
-        include: { brand: true },
-      });
-
-      if (!bot) {
-        this.logger.error(`❌ [DELIVERY ERROR] Bot bulunamadı: ${botId}`);
-        await this.prisma.delivery.update({
-          where: { id: deliveryRecord.id },
-          data: { status: 'PERMANENTLY_FAILED', lastError: 'Bot bulunamadı.' },
-        });
-        return { status: 'failed', reason: 'bot_not_found' };
-      }
 
       // 4. Token Çöz
       let rawToken: string;

@@ -499,6 +499,7 @@ export class CampaignService {
           return {
             name: 'send-telegram-message',
             data: {
+              brandId: effectiveBrandId,
               campaignId: campaign.id,
               campaignRunId: campaignRun.id,
               botId: bot.id,
