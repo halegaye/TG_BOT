@@ -511,7 +511,6 @@ export class CampaignService {
               idempotencyKey,
             },
             opts: {
-              jobId: idempotencyKey,
               removeOnComplete: true,
               attempts: 3,
             },

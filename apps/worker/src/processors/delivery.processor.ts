@@ -38,6 +38,8 @@ export class DeliveryProcessor extends WorkerHost {
       templateId,
     } = job.data;
 
+    this.logger.log(`🚀 [DELIVERY JOB PROCESSING] BotId [${botId}] -> ChatId [${chatId}] (SubscriberId: ${subscriberId})`);
+
     // 0. Acil Durum Durdurma (Emergency Stop) Kontrolü
     const isGlobalStopped = await this.redis.get('system:emergency_stop:global');
     const isBrandStopped = brandId ? await this.redis.get(`system:emergency_stop:brand:${brandId}`) : null;
