@@ -13,34 +13,31 @@ async function startDevPolling() {
   });
 
   if (bots.length === 0) {
-    console.log('⚠️ Veritabanında aktif bot bulunamadı. Lütfen önce panelden bir bot ekleyin!');
-    await prisma.$disconnect();
-    return;
-  }
+    console.log('⚠️ Veritabanında henüz aktif bot yok. Yeni bot eklenmesi bekleniyor...');
+  } else {
+    console.log(`✅ Toplam ${bots.length} adet aktif bot bulundu:`);
+    for (const b of bots) {
+      console.log(`  - @${b.username} (${b.displayName}) [ID: ${b.id}]`);
+    }
+    console.log('\n🔄 Botlar için Telegram Long Polling döngüsü başlatılıyor...\n');
 
-  console.log(`✅ Toplam ${bots.length} adet aktif bot bulundu:`);
-  for (const b of bots) {
-    console.log(`  - @${b.username} (${b.displayName}) [ID: ${b.id}]`);
-  }
-  console.log('\n🔄 Botlar için Telegram Long Polling döngüsü başlatılıyor...\n');
-
-  const botOffsets: Record<string, number> = {};
-
-  // Geliştirme modunda Telegram webhook'larını kaldır ki getUpdates çalışsın
-  for (const bot of bots) {
-    try {
-      const rawToken = encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
-      await fetch(`https://api.telegram.org/bot${rawToken}/deleteWebhook`);
-      console.log(`🧹 Bot [@${bot.username}] - Webhook silindi (Long Polling moduna geçildi).`);
-    } catch (err: any) {
-      console.error(`❌ Bot [@${bot.username}] webhook silinirken hata: ${err.message}`);
+    // Geliştirme modunda Telegram webhook'larını kaldır ki getUpdates çalışsın
+    for (const bot of bots) {
+      try {
+        const rawToken = encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+        await fetch(`https://api.telegram.org/bot${rawToken}/deleteWebhook`);
+        console.log(`🧹 Bot [@${bot.username}] - Webhook silindi (Long Polling moduna geçildi).`);
+      } catch (err: any) {
+        console.error(`❌ Bot [@${bot.username}] webhook silinirken hata: ${err.message}`);
+      }
     }
   }
 
-  console.log('\n📡 Telegram sunucularından /start ve mesaj güncellemeleri dinleniyor... (Durdurmak için Ctrl+C)\n');
+  console.log('\n📡 Telegram sunucularından /start ve mesaj güncellemeleri dinleniyor...\n');
 
-  const API_LOCAL_URL = process.env.API_LOCAL_URL || 'http://localhost:4000';
+  const API_LOCAL_URL = process.env.API_LOCAL_URL || 'http://api:4000';
   const knownBotIds = new Set<string>(bots.map((b) => b.id));
+  const botOffsets: Record<string, number> = {};
 
   while (true) {
     // Dynamically fetch all ACTIVE bots from DB to automatically discover new bots added via CSV or UI
