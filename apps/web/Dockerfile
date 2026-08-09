@@ -7,7 +7,8 @@ COPY . .
 RUN pnpm install
 ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN pnpm --filter @tg-bot/web build
+RUN pnpm --filter @tg-bot/database exec prisma generate
+RUN pnpm build
 
 FROM base AS runner
 WORKDIR /app
