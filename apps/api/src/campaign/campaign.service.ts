@@ -47,16 +47,23 @@ export class CampaignService {
     },
     userId?: string,
   ) {
-    if (!brandId) {
-      throw new BadRequestException('Marka seçimi zorunludur.');
+    let effectiveBrandId = brandId;
+    if (!effectiveBrandId || effectiveBrandId === 'undefined' || effectiveBrandId === 'null') {
+      const firstBrand = await this.prisma.brand.findFirst();
+      if (firstBrand) {
+        effectiveBrandId = firstBrand.id;
+      } else {
+        throw new BadRequestException('Sistemde henüz marka bulunmuyor.');
+      }
     }
+
     if (!dto.title || !dto.title.trim()) {
       throw new BadRequestException('Kampanya adı zorunludur.');
     }
 
     const campaign = await this.prisma.campaign.create({
       data: {
-        brandId,
+        brandId: effectiveBrandId,
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
         type: dto.type || 'IMMEDIATE',
