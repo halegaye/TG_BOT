@@ -118,6 +118,31 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  poller:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: tg_bot_poller_prod
+    restart: always
+    command: pnpm --filter @tg-bot/api poll:telegram
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-tg_bot_prod_db}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_pass_2026}@redis:6379
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
   web:
     build:
       context: .
