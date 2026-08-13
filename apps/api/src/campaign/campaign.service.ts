@@ -464,7 +464,7 @@ export class CampaignService {
     let totalEnqueued = 0;
     const template = campaign.template;
     const textToUse = body?.messageText || template?.content || campaign.description || 'Kampanya mesajı';
-    const buttonsToUse = body?.buttons || (template?.buttons ? JSON.parse(JSON.stringify(template.buttons)) : null);
+    const buttonsToUse = body?.buttons || (template?.buttonsJson ? JSON.parse(JSON.stringify(template.buttonsJson)) : null);
     const parseModeToUse = body?.parseMode || template?.parseMode || 'HTML';
     const mediaTypeToUse = template?.mediaType || 'NONE';
     const mediaUrlToUse = template?.mediaUrl || null;
