@@ -463,7 +463,11 @@ export class CampaignService {
 
     let totalEnqueued = 0;
     const template = campaign.template;
-    const textToUse = template?.content || campaign.description || 'Kampanya mesajı';
+    const textToUse = body?.messageText || template?.content || campaign.description || 'Kampanya mesajı';
+    const buttonsToUse = body?.buttons || (template?.buttons ? JSON.parse(JSON.stringify(template.buttons)) : null);
+    const parseModeToUse = body?.parseMode || template?.parseMode || 'HTML';
+    const mediaTypeToUse = template?.mediaType || 'NONE';
+    const mediaUrlToUse = template?.mediaUrl || null;
 
     for (const bot of botsToTarget) {
       const BATCH_SIZE = 500;
@@ -506,9 +510,10 @@ export class CampaignService {
               subscriberId: sub.id,
               chatId: sub.chatId ? sub.chatId.toString() : (sub.user?.telegramUserId ? sub.user.telegramUserId.toString() : ''),
               text: textToUse,
-              parseMode: template?.parseMode || 'HTML',
-              mediaType: template?.mediaType || 'NONE',
-              mediaUrl: template?.mediaUrl || null,
+              buttons: buttonsToUse,
+              parseMode: parseModeToUse,
+              mediaType: mediaTypeToUse,
+              mediaUrl: mediaUrlToUse,
               idempotencyKey,
             },
             opts: {

@@ -149,8 +149,12 @@ export default function CampaignWizardPage() {
         brandId: activeBrandId,
         targetBotIds: targetAllBots ? ['ALL'] : selectedBotIds,
       }),
-    onSuccess: (res) => {
-      setEstimatedCount(res.estimatedRecipientsCount);
+    onSuccess: (res: any) => {
+      const count = res?.estimatedAudienceCount ?? res?.estimatedRecipientsCount ?? 0;
+      setEstimatedCount(count);
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Tahmini alıcı hesaplanırken bir hata oluştu.');
     },
   });
 
@@ -360,7 +364,7 @@ export default function CampaignWizardPage() {
                 {estimatedCount !== null && (
                   <span className="flex items-center gap-1.5 font-semibold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
                     <Users className="h-3.5 w-3.5" />
-                    Tahmini Alıcı: <strong>{estimatedCount.toLocaleString('tr-TR')} Kullanıcı</strong>
+                    Tahmini Alıcı: <strong>{(Number(estimatedCount) || 0).toLocaleString('tr-TR')} Kullanıcı</strong>
                   </span>
                 )}
               </div>
