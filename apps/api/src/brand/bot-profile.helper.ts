@@ -8,9 +8,7 @@ export interface BrandBotProfile {
   botPhotoUrl?: string | null;
 }
 
-/**
- * Verilen ms süresi içinde resolve olmazsa reject eden timeout promise'i.
- */
+/** Timeout destekli fetch */
 function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 30000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -18,7 +16,45 @@ function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 30000):
 }
 
 /**
- * Telegram Bot API'ye baglanarak botun aciklama, kisa aciklama ve profil fotografini senkronize eder.
+ * Base64 data URI veya HTTP URL'den Buffer üretir.
+ */
+async function resolvePhotoBuffer(photoUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  if (photoUrl.startsWith('data:image/')) {
+    // data:image/png;base64,xxxx...
+    const commaIdx = photoUrl.indexOf(',');
+    if (commaIdx === -1) {
+      logger.warn('[ProfileSync] Geçersiz base64 data URI formatı.');
+      return null;
+    }
+    const header = photoUrl.substring(0, commaIdx); // "data:image/jpeg;base64"
+    const b64 = photoUrl.substring(commaIdx + 1);
+    const mime = header.split(':')[1]?.split(';')[0] || 'image/jpeg';
+    const buffer = Buffer.from(b64, 'base64');
+    logger.log(`[ProfileSync] Base64 çözüldü: ${buffer.length} bytes, mime: ${mime}`);
+    return { buffer, mime };
+  } else {
+    // HTTP URL
+    logger.log(`[ProfileSync] Fotoğraf indiriliyor: ${photoUrl}`);
+    try {
+      const imgRes = await fetchWithTimeout(photoUrl, {}, 15000);
+      if (!imgRes.ok) {
+        logger.warn(`[ProfileSync] HTTP ${imgRes.status}: Fotoğraf indirilemedi.`);
+        return null;
+      }
+      const ab = await imgRes.arrayBuffer();
+      const buffer = Buffer.from(ab);
+      const mime = imgRes.headers.get('content-type') || 'image/jpeg';
+      logger.log(`[ProfileSync] İndirildi: ${buffer.length} bytes, mime: ${mime}`);
+      return { buffer, mime };
+    } catch (err: any) {
+      logger.warn(`[ProfileSync] Fotoğraf indirme hatası: ${err.message}`);
+      return null;
+    }
+  }
+}
+
+/**
+ * Telegram Bot API'ye bağlanarak botun açıklama ve profil fotoğrafını senkronize eder.
  */
 export async function syncBotProfileWithBrand(
   rawToken: string,
@@ -27,7 +63,7 @@ export async function syncBotProfileWithBrand(
   if (!rawToken) return;
 
   // 1. setMyDescription
-  if (brand.botDescription !== undefined && brand.botDescription !== null && brand.botDescription.trim() !== '') {
+  if (brand.botDescription?.trim()) {
     try {
       const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyDescription`, {
         method: 'POST',
@@ -35,18 +71,15 @@ export async function syncBotProfileWithBrand(
         body: JSON.stringify({ description: brand.botDescription.trim() }),
       });
       const data = (await res.json()) as any;
-      if (data.ok) {
-        logger.log(`✅ [ProfileSync] Açıklama güncellendi.`);
-      } else {
-        logger.warn(`⚠️ [ProfileSync] setMyDescription: ${data.description}`);
-      }
+      if (data.ok) logger.log(`✅ [ProfileSync] Açıklama güncellendi.`);
+      else logger.warn(`⚠️ [ProfileSync] setMyDescription: ${data.description}`);
     } catch (err: any) {
       logger.warn(`⚠️ [ProfileSync] setMyDescription error: ${err.message}`);
     }
   }
 
   // 2. setMyShortDescription
-  if (brand.botShortDescription !== undefined && brand.botShortDescription !== null && brand.botShortDescription.trim() !== '') {
+  if (brand.botShortDescription?.trim()) {
     try {
       const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyShortDescription`, {
         method: 'POST',
@@ -54,134 +87,106 @@ export async function syncBotProfileWithBrand(
         body: JSON.stringify({ short_description: brand.botShortDescription.trim() }),
       });
       const data = (await res.json()) as any;
-      if (data.ok) {
-        logger.log(`✅ [ProfileSync] Kısa açıklama güncellendi.`);
-      } else {
-        logger.warn(`⚠️ [ProfileSync] setMyShortDescription: ${data.description}`);
-      }
+      if (data.ok) logger.log(`✅ [ProfileSync] Kısa açıklama güncellendi.`);
+      else logger.warn(`⚠️ [ProfileSync] setMyShortDescription: ${data.description}`);
     } catch (err: any) {
       logger.warn(`⚠️ [ProfileSync] setMyShortDescription error: ${err.message}`);
     }
   }
 
-  // 3. setMyProfilePhoto - 3 farklı yöntem sırayla denenir
-  if (brand.botPhotoUrl && brand.botPhotoUrl.trim() !== '') {
-    let photoBuffer: Buffer | null = null;
-    let contentType = 'image/jpeg';
+  // 3. setMyProfilePhoto
+  if (brand.botPhotoUrl?.trim()) {
     const photoUrl = brand.botPhotoUrl.trim();
 
-    // Fotoğrafı hazırla (Base64 veya URL)
-    try {
-      if (photoUrl.startsWith('data:image/')) {
-        // Base64 Data URI
-        const parts = photoUrl.split(';base64,');
-        contentType = parts[0].replace('data:', '');
-        photoBuffer = Buffer.from(parts[1], 'base64');
-        logger.log(`[ProfileSync] Fotoğraf kaynağı: base64 (${photoBuffer.length} bytes)`);
-      } else {
-        // HTTP URL - indir
-        logger.log(`[ProfileSync] Fotoğraf indiriliyor: ${photoUrl}`);
-        const imgRes = await fetchWithTimeout(photoUrl, {}, 15000);
-        if (!imgRes.ok) {
-          logger.warn(`⚠️ [ProfileSync] Fotoğraf indirilemedi: HTTP ${imgRes.status}`);
-        } else {
-          const ab = await imgRes.arrayBuffer();
-          photoBuffer = Buffer.from(ab);
-          contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-          logger.log(`[ProfileSync] Fotoğraf indirildi: ${photoBuffer.length} bytes`);
-        }
-      }
-    } catch (prepErr: any) {
-      logger.warn(`⚠️ [ProfileSync] Fotoğraf hazırlanırken hata: ${prepErr.message}`);
-    }
-
-    if (!photoBuffer || photoBuffer.length === 0) {
-      logger.warn(`⚠️ [ProfileSync] Fotoğraf buffer boş, atlanıyor.`);
+    // Fotoğraf buffer'ı hazırla
+    const resolved = await resolvePhotoBuffer(photoUrl);
+    if (!resolved) {
+      logger.warn(`[ProfileSync] Fotoğraf çözümlenemedi, atlanıyor.`);
       return;
     }
 
-    // YÖNTEM A: InputProfilePhotoStatic - Bot API 7.0+ (multipart + attach://)
+    const { buffer } = resolved;
+
+    if (buffer.length > 5 * 1024 * 1024) {
+      logger.warn(`[ProfileSync] Fotoğraf 5MB'ı aşıyor (${buffer.length} bytes). Telegram reddedebilir.`);
+    }
+
+    // YÖNTEM A: Bot API 7.0+ — InputProfilePhotoStatic (attach://)
     let photoUpdated = false;
     try {
-      logger.log(`[ProfileSync] Yöntem A: InputProfilePhotoStatic (Bot API 7.0+)...`);
-      const formData = new FormData();
-      const blob = new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' });
-      formData.append('bot_profile_photo', blob, 'bot_profile_photo.jpg');
-      formData.append('photo', JSON.stringify({
-        type: 'static',
-        photo: 'attach://bot_profile_photo',
-      }));
+      logger.log(`[ProfileSync] Yöntem A: InputProfilePhotoStatic...`);
+      const fd = new FormData();
+      // Her zaman JPEG olarak gönder (Telegram yalnızca JPEG kabul eder)
+      fd.append('bot_profile_photo', new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' }), 'photo.jpg');
+      fd.append('photo', JSON.stringify({ type: 'static', photo: 'attach://bot_profile_photo' }));
 
-      const photoRes = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+      const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
         method: 'POST',
-        body: formData as any,
+        body: fd as any,
       });
-      const photoData = (await photoRes.json()) as any;
-      logger.log(`[ProfileSync] Telegram Yanıt (A): ${JSON.stringify(photoData)}`);
+      const data = (await res.json()) as any;
+      logger.log(`[ProfileSync] Telegram yanıtı (A): ${JSON.stringify(data)}`);
 
-      if (photoData.ok) {
+      if (data.ok) {
         logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem A).`);
         photoUpdated = true;
       } else {
-        logger.warn(`⚠️ [ProfileSync] Yöntem A başarısız: ${photoData.description}`);
+        logger.warn(`⚠️ [ProfileSync] Yöntem A başarısız: [${data.error_code}] ${data.description}`);
       }
-    } catch (errA: any) {
-      logger.warn(`⚠️ [ProfileSync] Yöntem A error: ${errA.message}`);
+    } catch (err: any) {
+      logger.warn(`⚠️ [ProfileSync] Yöntem A exception: ${err.message}`);
     }
 
-    // YÖNTEM B: Fallback - eski basit multipart
+    // YÖNTEM B: Eski basit multipart — bazı Bot API sürümlerinde çalışır
     if (!photoUpdated) {
       try {
-        logger.log(`[ProfileSync] Yöntem B: Basit multipart (fallback)...`);
-        const formDataB = new FormData();
-        const blobB = new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' });
-        formDataB.append('photo', blobB, 'photo.jpg');
+        logger.log(`[ProfileSync] Yöntem B: Basit multipart...`);
+        const fd2 = new FormData();
+        fd2.append('photo', new Blob([new Uint8Array(buffer)], { type: 'image/jpeg' }), 'photo.jpg');
 
-        const resB = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+        const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
           method: 'POST',
-          body: formDataB as any,
+          body: fd2 as any,
         });
-        const dataB = (await resB.json()) as any;
-        logger.log(`[ProfileSync] Telegram Yanıt (B): ${JSON.stringify(dataB)}`);
+        const data = (await res.json()) as any;
+        logger.log(`[ProfileSync] Telegram yanıtı (B): ${JSON.stringify(data)}`);
 
-        if (dataB.ok) {
+        if (data.ok) {
           logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem B).`);
           photoUpdated = true;
         } else {
-          logger.warn(`⚠️ [ProfileSync] Yöntem B başarısız: ${dataB.description}`);
+          logger.warn(`⚠️ [ProfileSync] Yöntem B başarısız: [${data.error_code}] ${data.description}`);
         }
-      } catch (errB: any) {
-        logger.warn(`⚠️ [ProfileSync] Yöntem B error: ${errB.message}`);
+      } catch (err: any) {
+        logger.warn(`⚠️ [ProfileSync] Yöntem B exception: ${err.message}`);
       }
     }
 
-    // YÖNTEM C: Fallback - URL doğrudan JSON ile gönder (HTTP URL ise)
+    // YÖNTEM C: URL ile gönder (sadece HTTP URL ise)
     if (!photoUpdated && !photoUrl.startsWith('data:')) {
       try {
-        logger.log(`[ProfileSync] Yöntem C: Direkt URL JSON...`);
-        const resC = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+        logger.log(`[ProfileSync] Yöntem C: URL referansı...`);
+        const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            photo: { type: 'static', photo: photoUrl },
-          }),
+          body: JSON.stringify({ photo: { type: 'static', photo: photoUrl } }),
         });
-        const dataC = (await resC.json()) as any;
-        logger.log(`[ProfileSync] Telegram Yanıt (C): ${JSON.stringify(dataC)}`);
+        const data = (await res.json()) as any;
+        logger.log(`[ProfileSync] Telegram yanıtı (C): ${JSON.stringify(data)}`);
 
-        if (dataC.ok) {
+        if (data.ok) {
           logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem C).`);
           photoUpdated = true;
         } else {
-          logger.warn(`⚠️ [ProfileSync] Yöntem C başarısız: ${dataC.description}`);
+          logger.warn(`⚠️ [ProfileSync] Yöntem C başarısız: [${data.error_code}] ${data.description}`);
         }
-      } catch (errC: any) {
-        logger.warn(`⚠️ [ProfileSync] Yöntem C error: ${errC.message}`);
+      } catch (err: any) {
+        logger.warn(`⚠️ [ProfileSync] Yöntem C exception: ${err.message}`);
       }
     }
 
     if (!photoUpdated) {
-      logger.error(`❌ [ProfileSync] Tüm yöntemler başarısız - profil fotoğrafı güncellenemedi.`);
+      logger.error(`❌ [ProfileSync] Tüm yöntemler başarısız! Profil fotoğrafı güncellenemedi.`);
     }
   }
 }
