@@ -3,12 +3,15 @@ import { AppModule } from './app.module';
 import { BigIntInterceptor } from './common/interceptors/bigint.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    // Fotoğraf yüklemeleri için body limit artırıldı (base64 ~5MB foto = ~7MB JSON)
-    bodyParser: true,
-  });
-  app.use(require('express').json({ limit: '20mb' }));
-  app.use(require('express').urlencoded({ extended: true, limit: '20mb' }));
+  // bodyParser: false → NestJS'in varsayılan 1MB limitli parser'ını KAPAT
+  // Aşağıda manuel olarak 20MB limitli parser ekliyoruz
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  // Büyük fotoğraf (base64) için 20MB body limiti
+  const express = require('express');
+  app.use(express.json({ limit: '20mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
   app.enableCors();
   app.useGlobalInterceptors(new BigIntInterceptor());
 
