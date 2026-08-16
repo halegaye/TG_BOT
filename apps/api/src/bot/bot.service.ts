@@ -49,10 +49,11 @@ export class BotService {
     if (user && !isSuperAdmin) {
       const userBrandIds = user.memberships?.map((m: any) => m.brandId) || [];
       if (cleanBrandId) {
-        if (!userBrandIds.includes(cleanBrandId)) {
-          throw new ForbiddenException('Bu markanın botlarını görüntüleme yetkiniz yok.');
+        if (userBrandIds.includes(cleanBrandId)) {
+          where = { brandId: cleanBrandId };
+        } else {
+          where = { brandId: { in: userBrandIds } };
         }
-        where = { brandId: cleanBrandId };
       } else {
         where = { brandId: { in: userBrandIds } };
       }
@@ -94,7 +95,7 @@ export class BotService {
       status: bot.status,
       maskedToken: bot.tokenFingerprint ? `...${bot.tokenFingerprint.slice(0, 4)}` : '...****',
       webhookUrl: `${webhookBaseUrl}/webhook/${bot.webhookPathSecret}`,
-      subscribers: bot._count.subscribers,
+      subscribers: bot._count?.subscribers || 0,
       startMessage: bot.startMessage,
       startParseMode: bot.startParseMode,
       buttons: bot.buttonsJson,
@@ -178,8 +179,14 @@ export class BotService {
       status?: BotStatus;
     } = {},
   ) {
-    if (!brandId) {
-      throw new BadRequestException('Marka seçimi zorunludur (brandId eksik).');
+    let effectiveBrandId = brandId;
+    if (!effectiveBrandId || effectiveBrandId === 'undefined' || effectiveBrandId === 'null' || effectiveBrandId.trim() === '') {
+      const firstBrand = await this.prisma.brand.findFirst();
+      if (firstBrand) {
+        effectiveBrandId = firstBrand.id;
+      } else {
+        throw new BadRequestException('Sistemde henüz marka bulunmuyor. Lütfen önce Markalar sayfasından yeni bir marka ekleyin.');
+      }
     }
 
     const cleanToken = rawToken?.trim();
@@ -261,7 +268,7 @@ export class BotService {
 
     const createdBot = await this.prisma.telegramBot.create({
       data: {
-        brandId,
+        brandId: effectiveBrandId,
         telegramBotId: BigInt(botInfo.id),
         username: botInfo.username,
         displayName: displayName || botInfo.first_name,
@@ -281,7 +288,7 @@ export class BotService {
     });
 
     // Markaya ait profil fotoğrafı ve açıklaması varsa Telegram API ile bot profilini otomatik senkronize et
-    const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
+    const brand = await this.prisma.brand.findUnique({ where: { id: effectiveBrandId } });
     if (brand && (brand.botDescription || brand.botShortDescription || brand.botPhotoUrl)) {
       syncBotProfileWithBrand(cleanToken, {
         botDescription: brand.botDescription,
