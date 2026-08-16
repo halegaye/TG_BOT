@@ -10,6 +10,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RbacGuard } from './guards/rbac.guard';
 
+import { PrismaService } from '../prisma.service';
+
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
@@ -19,6 +21,7 @@ import { RbacGuard } from './guards/rbac.guard';
     }),
   ],
   providers: [
+    PrismaService,
     HashService,
     TwoFactorService,
     MailService,
