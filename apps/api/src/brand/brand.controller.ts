@@ -22,6 +22,9 @@ export class BrandController {
       timezone?: string;
       messageRateLimitPerSec?: number;
       monthlyDeliveryQuota?: number;
+      botDescription?: string;
+      botShortDescription?: string;
+      botPhotoUrl?: string;
       adminEmail?: string;
     },
   ) {
@@ -42,10 +45,20 @@ export class BrandController {
       timezone?: string;
       messageRateLimitPerSec?: number;
       monthlyDeliveryQuota?: number;
+      botDescription?: string;
+      botShortDescription?: string;
+      botPhotoUrl?: string;
       adminEmail?: string;
     },
   ) {
     return this.brandService.updateBrand(id, body, req.user);
+  }
+
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.BRAND_ADMIN)
+  @Post(':id/sync-bot-profiles')
+  async syncBrandBotProfiles(@Request() req: any, @Param('id') id: string) {
+    return this.brandService.syncBrandBotProfiles(id, req.user);
   }
 
   @UseGuards(JwtAuthGuard, RbacGuard)

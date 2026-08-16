@@ -69,6 +69,9 @@ model Brand {
   timezone                String            @default("Europe/Belgrade")
   messageRateLimitPerSec  Int               @default(25)
   monthlyDeliveryQuota    Int               @default(1000000)
+  botDescription          String?
+  botShortDescription     String?
+  botPhotoUrl             String?
   isActive                Boolean           @default(true)
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt

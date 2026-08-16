@@ -87,6 +87,9 @@ export async function createBrand(data: {
   logoUrl?: string;
   brandColor?: string;
   timezone?: string;
+  botDescription?: string;
+  botShortDescription?: string;
+  botPhotoUrl?: string;
   adminEmail?: string;
 }) {
   return fetchApi('/api/v1/brands', {
@@ -102,12 +105,21 @@ export async function updateBrand(
     logoUrl?: string;
     brandColor?: string;
     timezone?: string;
+    botDescription?: string;
+    botShortDescription?: string;
+    botPhotoUrl?: string;
     adminEmail?: string;
   },
 ) {
   return fetchApi(`/api/v1/brands/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+}
+
+export async function syncBrandBotProfiles(brandId: string) {
+  return fetchApi(`/api/v1/brands/${brandId}/sync-bot-profiles`, {
+    method: 'POST',
   });
 }
 

@@ -13,6 +13,7 @@ import { EncryptionService } from '../common/encryption.service';
 import { InlineButtonDto, validateInlineButtonUrl } from '@tg-bot/shared';
 import { Role, BotStatus } from '@tg-bot/database';
 import { Redis } from 'ioredis';
+import { syncBotProfileWithBrand } from '../brand/bot-profile.helper';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -264,6 +265,20 @@ export class BotService {
         tags: extraOptions.tags || [],
       },
     });
+
+    // Markaya ait profil fotoğrafı ve açıklaması varsa Telegram API ile bot profilini otomatik senkronize et
+    const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
+    if (brand && (brand.botDescription || brand.botShortDescription || brand.botPhotoUrl)) {
+      syncBotProfileWithBrand(cleanToken, {
+        botDescription: brand.botDescription,
+        botShortDescription: brand.botShortDescription,
+        botPhotoUrl: brand.botPhotoUrl,
+      }).catch((err) => {
+        this.logger.warn(
+          `[Auto Sync Bot Profile Warning] Yeni bot @${botInfo.username} profili senkronize edilemedi: ${err.message}`,
+        );
+      });
+    }
 
     return this.getBotById(createdBot.id);
   }

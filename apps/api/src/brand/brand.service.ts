@@ -1,10 +1,14 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Role } from '@tg-bot/database';
+import { EncryptionService } from '@tg-bot/shared';
+import { syncBotProfileWithBrand } from './bot-profile.helper';
 import * as argon2 from 'argon2';
 
 @Injectable()
 export class BrandService {
+  private encryptionService = new EncryptionService();
+
   constructor(private prisma: PrismaService) {}
 
   private checkBrandAccess(brandId: string, user?: any) {
@@ -28,6 +32,9 @@ export class BrandService {
     timezone?: string;
     messageRateLimitPerSec?: number;
     monthlyDeliveryQuota?: number;
+    botDescription?: string;
+    botShortDescription?: string;
+    botPhotoUrl?: string;
     adminEmail?: string;
   }) {
     const existing = await this.prisma.brand.findUnique({
@@ -47,6 +54,9 @@ export class BrandService {
         timezone: data.timezone || 'Europe/Belgrade',
         messageRateLimitPerSec: data.messageRateLimitPerSec || 30,
         monthlyDeliveryQuota: data.monthlyDeliveryQuota || 1000000,
+        botDescription: data.botDescription || null,
+        botShortDescription: data.botShortDescription || null,
+        botPhotoUrl: data.botPhotoUrl || null,
       },
     });
 
@@ -73,6 +83,9 @@ export class BrandService {
       timezone?: string;
       messageRateLimitPerSec?: number;
       monthlyDeliveryQuota?: number;
+      botDescription?: string;
+      botShortDescription?: string;
+      botPhotoUrl?: string;
       adminEmail?: string;
     },
     user?: any,
@@ -95,6 +108,9 @@ export class BrandService {
         ...(data.monthlyDeliveryQuota !== undefined && {
           monthlyDeliveryQuota: data.monthlyDeliveryQuota,
         }),
+        ...(data.botDescription !== undefined && { botDescription: data.botDescription }),
+        ...(data.botShortDescription !== undefined && { botShortDescription: data.botShortDescription }),
+        ...(data.botPhotoUrl !== undefined && { botPhotoUrl: data.botPhotoUrl }),
       },
     });
 
@@ -112,7 +128,44 @@ export class BrandService {
       );
     }
 
+    // Markaya bağlı tüm botların profil açıklamasını ve profil fotoğrafını Telegram API ile otomatik senkronize et
+    this.syncBrandBotProfiles(id, user).catch((err) => {
+      console.warn(`[Auto Sync Bot Profiles Warning] Marka [${id}] bot profilleri güncellenirken hata: ${err.message}`);
+    });
+
     return updated;
+  }
+
+  async syncBrandBotProfiles(brandId: string, user?: any) {
+    this.checkBrandAccess(brandId, user);
+
+    const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
+    if (!brand) throw new NotFoundException('Marka bulunamadı.');
+
+    const activeBots = await this.prisma.telegramBot.findMany({
+      where: { brandId },
+    });
+
+    let syncedCount = 0;
+    for (const bot of activeBots) {
+      try {
+        const rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+        await syncBotProfileWithBrand(rawToken, {
+          botDescription: brand.botDescription,
+          botShortDescription: brand.botShortDescription,
+          botPhotoUrl: brand.botPhotoUrl,
+        });
+        syncedCount++;
+      } catch (err: any) {
+        console.warn(`[Sync Bot Profile Error] Bot @${bot.username} profili senkronize edilemedi: ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      syncedCount,
+      message: `${syncedCount} adet botun açıklamaları ve profil fotoğrafı Telegram'a başarıyla senkronize edildi.`,
+    };
   }
 
   async addUserToBrand(
