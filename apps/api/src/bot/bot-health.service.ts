@@ -35,7 +35,13 @@ export class BotHealthService {
     private prisma: PrismaService,
     private encryptionService: EncryptionService,
   ) {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (err) => {
+      this.logger.warn(`[Redis Connection Guard] BotHealthService: ${err.message}`);
+    });
   }
 
   async runHealthCheckForBot(botId: string): Promise<BotHealthSummary> {

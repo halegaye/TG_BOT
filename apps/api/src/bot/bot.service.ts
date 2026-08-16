@@ -26,7 +26,13 @@ export class BotService {
     private prisma: PrismaService,
     private encryptionService: EncryptionService,
   ) {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (err) => {
+      this.logger.warn(`[Redis Connection Guard] BotService: ${err.message}`);
+    });
   }
 
   async getAllBots(brandId?: string, user?: any) {
@@ -35,18 +41,26 @@ export class BotService {
       (m: any) => m.role === Role.SUPER_ADMIN || m.role === 'SUPER_ADMIN',
     );
 
+    const cleanBrandId =
+      brandId && brandId !== 'undefined' && brandId !== 'null' && brandId.trim() !== ''
+        ? brandId.trim()
+        : undefined;
+
     if (user && !isSuperAdmin) {
       const userBrandIds = user.memberships?.map((m: any) => m.brandId) || [];
-      if (brandId) {
-        if (!userBrandIds.includes(brandId)) {
+      if (cleanBrandId) {
+        if (!userBrandIds.includes(cleanBrandId)) {
           throw new ForbiddenException('Bu markanın botlarını görüntüleme yetkiniz yok.');
         }
-        where = { brandId };
+        where = { brandId: cleanBrandId };
       } else {
         where = { brandId: { in: userBrandIds } };
       }
-    } else if (brandId) {
-      where = { brandId };
+    } else if (cleanBrandId) {
+      const brandExists = await this.prisma.brand.findUnique({ where: { id: cleanBrandId } });
+      if (brandExists) {
+        where = { brandId: cleanBrandId };
+      }
     }
 
     const bots = await this.prisma.telegramBot.findMany({
