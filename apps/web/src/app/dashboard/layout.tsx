@@ -37,18 +37,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [selectedBrandId, setSelectedBrandId] = useState<string>('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
-  const { data: brands = [] } = useQuery({
+  const { data: brands = [], isLoading: isLoadingBrands } = useQuery({
     queryKey: ['brands'],
     queryFn: fetchBrands,
   });
 
   useEffect(() => {
-    const stored = getStoredBrandId();
-    if (stored) {
-      setSelectedBrandId(stored);
-    } else if (brands.length > 0) {
-      setSelectedBrandId(brands[0].id);
-      setStoredBrandId(brands[0].id);
+    if (brands.length > 0) {
+      const stored = getStoredBrandId();
+      const isStoredValid = stored && brands.some((b: any) => b.id === stored);
+      if (isStoredValid) {
+        setSelectedBrandId(stored!);
+      } else {
+        setSelectedBrandId(brands[0].id);
+        setStoredBrandId(brands[0].id);
+      }
+    } else {
+      setSelectedBrandId('');
     }
   }, [brands]);
 
@@ -237,8 +242,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               onChange={(e) => handleBrandChange(e.target.value)}
               className="rounded-lg bg-slate-950 py-1.5 px-3 text-xs text-sky-400 font-medium border border-slate-700 focus:border-sky-500 focus:outline-none max-w-[180px] sm:max-w-none truncate"
             >
-              {brands.length === 0 ? (
-                <option value="">Marka Yükleniyor...</option>
+              {isLoadingBrands ? (
+                <option value="">Markalar Yükleniyor...</option>
+              ) : brands.length === 0 ? (
+                <option value="">Tüm Sistem (Marka Yok)</option>
               ) : (
                 brands.map((brand: any) => (
                   <option key={brand.id} value={brand.id}>

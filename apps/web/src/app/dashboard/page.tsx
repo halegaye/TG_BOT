@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { fetchAdvancedOverviewMetrics, triggerEmergencyStop, getStoredBrandId } from '@/lib/api';
 import Link from 'next/link';
@@ -24,11 +24,22 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const activeBrandId = getStoredBrandId() || '';
+  const [activeBrandId, setActiveBrandId] = useState<string>('');
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [confirmationText, setConfirmationText] = useState('');
   const [isStopped, setIsStopped] = useState(false);
   const [stopError, setStopError] = useState('');
+
+  useEffect(() => {
+    setActiveBrandId(getStoredBrandId() || '');
+    const interval = setInterval(() => {
+      const current = getStoredBrandId() || '';
+      if (current !== activeBrandId) {
+        setActiveBrandId(current);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeBrandId]);
 
   const { data: metricsData, isLoading } = useQuery({
     queryKey: ['advancedOverviewMetrics', activeBrandId],

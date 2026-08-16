@@ -25,6 +25,13 @@ export class AnalyticsService {
       effectiveBrandId = brandId || userBrandIds[0];
     }
 
+    if (effectiveBrandId) {
+      const brandExists = await this.prisma.brand.findUnique({ where: { id: effectiveBrandId } });
+      if (!brandExists) {
+        effectiveBrandId = undefined;
+      }
+    }
+
     const brandWhere = effectiveBrandId ? { brandId: effectiveBrandId } : {};
 
     const now = new Date();
