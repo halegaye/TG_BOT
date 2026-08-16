@@ -9,6 +9,15 @@ export interface BrandBotProfile {
 }
 
 /**
+ * Verilen ms süresi içinde resolve olmazsa reject eden timeout promise'i.
+ */
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 30000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+/**
  * Telegram Bot API'ye baglanarak botun aciklama, kisa aciklama ve profil fotografini senkronize eder.
  */
 export async function syncBotProfileWithBrand(
@@ -20,7 +29,7 @@ export async function syncBotProfileWithBrand(
   // 1. setMyDescription
   if (brand.botDescription !== undefined && brand.botDescription !== null && brand.botDescription.trim() !== '') {
     try {
-      const res = await fetch(`https://api.telegram.org/bot${rawToken}/setMyDescription`, {
+      const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyDescription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: brand.botDescription.trim() }),
@@ -39,7 +48,7 @@ export async function syncBotProfileWithBrand(
   // 2. setMyShortDescription
   if (brand.botShortDescription !== undefined && brand.botShortDescription !== null && brand.botShortDescription.trim() !== '') {
     try {
-      const res = await fetch(`https://api.telegram.org/bot${rawToken}/setMyShortDescription`, {
+      const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyShortDescription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ short_description: brand.botShortDescription.trim() }),
@@ -68,18 +77,18 @@ export async function syncBotProfileWithBrand(
         const parts = photoUrl.split(';base64,');
         contentType = parts[0].replace('data:', '');
         photoBuffer = Buffer.from(parts[1], 'base64');
-        logger.log(`[ProfileSync] Fotoğraf kaynağı: base64 (${photoBuffer.length} bytes, ${contentType})`);
+        logger.log(`[ProfileSync] Fotoğraf kaynağı: base64 (${photoBuffer.length} bytes)`);
       } else {
         // HTTP URL - indir
         logger.log(`[ProfileSync] Fotoğraf indiriliyor: ${photoUrl}`);
-        const imgRes = await fetch(photoUrl, { signal: AbortSignal.timeout(15000) });
+        const imgRes = await fetchWithTimeout(photoUrl, {}, 15000);
         if (!imgRes.ok) {
           logger.warn(`⚠️ [ProfileSync] Fotoğraf indirilemedi: HTTP ${imgRes.status}`);
         } else {
           const ab = await imgRes.arrayBuffer();
           photoBuffer = Buffer.from(ab);
           contentType = imgRes.headers.get('content-type') || 'image/jpeg';
-          logger.log(`[ProfileSync] Fotoğraf indirildi: ${photoBuffer.length} bytes, ${contentType}`);
+          logger.log(`[ProfileSync] Fotoğraf indirildi: ${photoBuffer.length} bytes`);
         }
       }
     } catch (prepErr: any) {
@@ -103,10 +112,9 @@ export async function syncBotProfileWithBrand(
         photo: 'attach://bot_profile_photo',
       }));
 
-      const photoRes = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+      const photoRes = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
         method: 'POST',
         body: formData as any,
-        signal: AbortSignal.timeout(30000),
       });
       const photoData = (await photoRes.json()) as any;
       logger.log(`[ProfileSync] Telegram Yanıt (A): ${JSON.stringify(photoData)}`);
@@ -121,7 +129,7 @@ export async function syncBotProfileWithBrand(
       logger.warn(`⚠️ [ProfileSync] Yöntem A error: ${errA.message}`);
     }
 
-    // YÖNTEM B: Fallback - eski basit multipart (Bot API < 7.0 uyumluluğu)
+    // YÖNTEM B: Fallback - eski basit multipart
     if (!photoUpdated) {
       try {
         logger.log(`[ProfileSync] Yöntem B: Basit multipart (fallback)...`);
@@ -129,10 +137,9 @@ export async function syncBotProfileWithBrand(
         const blobB = new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' });
         formDataB.append('photo', blobB, 'photo.jpg');
 
-        const resB = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+        const resB = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
           method: 'POST',
           body: formDataB as any,
-          signal: AbortSignal.timeout(30000),
         });
         const dataB = (await resB.json()) as any;
         logger.log(`[ProfileSync] Telegram Yanıt (B): ${JSON.stringify(dataB)}`);
@@ -152,13 +159,12 @@ export async function syncBotProfileWithBrand(
     if (!photoUpdated && !photoUrl.startsWith('data:')) {
       try {
         logger.log(`[ProfileSync] Yöntem C: Direkt URL JSON...`);
-        const resC = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+        const resC = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             photo: { type: 'static', photo: photoUrl },
           }),
-          signal: AbortSignal.timeout(30000),
         });
         const dataC = (await resC.json()) as any;
         logger.log(`[ProfileSync] Telegram Yanıt (C): ${JSON.stringify(dataC)}`);
