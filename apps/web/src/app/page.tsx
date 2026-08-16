@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, ShieldCheck, User, ArrowRight, KeyRound, Smartphone } from 'lucide-react';
 import Link from 'next/link';
-import { setStoredToken, setStoredBrandId, getApiBaseUrl } from '@/lib/api';
+import { setStoredToken, setStoredBrandId, getStoredToken, fetchMe, getApiBaseUrl } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +14,20 @@ export default function LoginPage() {
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const existingToken = getStoredToken();
+    if (existingToken && existingToken.length > 20) {
+      fetchMe()
+        .then(() => {
+          window.location.href = '/dashboard';
+        })
+        .catch(() => {
+          localStorage.removeItem('access_token');
+          document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;';
+        });
+    }
+  }, []);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -65,11 +79,12 @@ export default function LoginPage() {
       const token = data.access_token || data.accessToken;
       if (token) {
         setStoredToken(token);
+        document.cookie = `access_token=${token}; path=/; max-age=86400; SameSite=Lax`;
         if (data.user?.memberships?.[0]?.brandId) {
           setStoredBrandId(data.user.memberships[0].brandId);
         }
       }
-      router.push('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message || 'Giriş yapılamadı. Tekrar deneyin.');
     } finally {

@@ -55,8 +55,8 @@ services:
       PORT_API: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-tg_bot_prod_db}?schema=public
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_secure_pass_2026}@redis:6379
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-super_secret_encryption_key_32_bytes_min_length_enterprise_2026}
+      JWT_SECRET: ${JWT_SECRET:-jwt_super_secret_key_change_this_2026}
       WEBHOOK_BASE_URL: ${WEBHOOK_BASE_URL}
     depends_on:
       postgres:

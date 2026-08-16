@@ -69,6 +69,7 @@ export async function fetchApi<T = any>(
 
     if (res.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/') {
       localStorage.removeItem('access_token');
+      document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;';
       window.location.href = '/';
     }
 
