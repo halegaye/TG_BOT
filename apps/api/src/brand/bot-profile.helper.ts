@@ -56,11 +56,15 @@ export async function syncBotProfileWithBrand(
   }
 
   // 3. setMyProfilePhoto (Profil Fotoğrafı)
+  // Telegram Bot API 7.0+ requires InputProfilePhotoStatic format:
+  //   multipart/form-data with field "bot_profile_photo" (the file)
+  //   plus JSON field "photo" = { "type": "static", "photo": "attach://bot_profile_photo" }
   if (brand.botPhotoUrl && brand.botPhotoUrl.trim() !== '') {
     try {
       let photoBuffer: Buffer;
       let contentType = 'image/jpeg';
 
+      // Base64 Data URI veya HTTP URL desteği
       if (brand.botPhotoUrl.startsWith('data:image/')) {
         const parts = brand.botPhotoUrl.split(';base64,');
         contentType = parts[0].replace('data:', '');
@@ -77,9 +81,19 @@ export async function syncBotProfileWithBrand(
         }
       }
 
+      // Telegram Bot API 7.0+ gereksinimi:
+      // multipart/form-data: "bot_profile_photo" = dosya, "photo" = JSON objesi
       const formData = new FormData();
       const blob = new Blob([new Uint8Array(photoBuffer)], { type: contentType });
-      formData.append('photo', blob, 'bot_profile_photo.jpg');
+
+      // Dosyayı "bot_profile_photo" adıyla ekle
+      formData.append('bot_profile_photo', blob, 'bot_profile_photo.jpg');
+
+      // InputProfilePhotoStatic objesi: type + attach:// referansı
+      formData.append('photo', JSON.stringify({
+        type: 'static',
+        photo: 'attach://bot_profile_photo',
+      }));
 
       const photoRes = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
         method: 'POST',
