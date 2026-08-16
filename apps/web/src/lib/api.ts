@@ -66,6 +66,12 @@ export async function fetchApi<T = any>(
       const errorJson = await res.json();
       errorMsg = errorJson.message || errorJson.error || errorMsg;
     } catch (_) {}
+
+    if (res.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      localStorage.removeItem('access_token');
+      window.location.href = '/';
+    }
+
     throw new Error(errorMsg);
   }
 
