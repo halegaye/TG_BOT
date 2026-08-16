@@ -34,23 +34,35 @@ async function createSuperAdmin() {
   });
 
   // 3. PanelUser Oluştur/Güncelle
-  const user = await prisma.panelUser.upsert({
-    where: { email },
-    update: {
-      passwordHash,
-      isActive: true,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-    },
-    create: {
-      firstName,
-      lastName,
-      email,
-      username,
-      passwordHash,
-      isActive: true,
-    },
+  const existingUser = await prisma.panelUser.findFirst({
+    where: { OR: [{ email }, { username }] },
   });
+
+  let user;
+  if (existingUser) {
+    user = await prisma.panelUser.update({
+      where: { id: existingUser.id },
+      data: {
+        email,
+        username,
+        passwordHash,
+        isActive: true,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+  } else {
+    user = await prisma.panelUser.create({
+      data: {
+        firstName,
+        lastName,
+        email,
+        username,
+        passwordHash,
+        isActive: true,
+      },
+    });
+  }
 
   // 4. SUPER_ADMIN Marka Üyeliği Tanımla
   await prisma.brandMembership.upsert({

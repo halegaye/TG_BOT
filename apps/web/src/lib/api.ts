@@ -3,6 +3,9 @@ export function getApiBaseUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL;
   }
   if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:4000/api/v1';
+    }
     return '/api/v1';
   }
   return 'http://localhost:4000/api/v1';
