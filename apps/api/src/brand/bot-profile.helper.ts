@@ -17,7 +17,7 @@ export async function syncBotProfileWithBrand(
 ) {
   if (!rawToken) return;
 
-  // 1. setMyDescription (Genel Açıklama - Bot sohbeti ilk açıldığında görünen)
+  // 1. setMyDescription
   if (brand.botDescription !== undefined && brand.botDescription !== null && brand.botDescription.trim() !== '') {
     try {
       const res = await fetch(`https://api.telegram.org/bot${rawToken}/setMyDescription`, {
@@ -27,16 +27,16 @@ export async function syncBotProfileWithBrand(
       });
       const data = (await res.json()) as any;
       if (data.ok) {
-        logger.log(`✅ [Telegram Bot Profile Sync] Bot açıklaması başarıyla güncellendi.`);
+        logger.log(`✅ [ProfileSync] Açıklama güncellendi.`);
       } else {
-        logger.warn(`⚠️ [Telegram Bot Profile Sync] setMyDescription uyarısı: ${data.description}`);
+        logger.warn(`⚠️ [ProfileSync] setMyDescription: ${data.description}`);
       }
     } catch (err: any) {
-      logger.warn(`⚠️ [Telegram Bot Profile Sync] setMyDescription hatası: ${err.message}`);
+      logger.warn(`⚠️ [ProfileSync] setMyDescription error: ${err.message}`);
     }
   }
 
-  // 2. setMyShortDescription (Kısa Açıklama - Profil detayında ve aramada görünen)
+  // 2. setMyShortDescription
   if (brand.botShortDescription !== undefined && brand.botShortDescription !== null && brand.botShortDescription.trim() !== '') {
     try {
       const res = await fetch(`https://api.telegram.org/bot${rawToken}/setMyShortDescription`, {
@@ -46,50 +46,58 @@ export async function syncBotProfileWithBrand(
       });
       const data = (await res.json()) as any;
       if (data.ok) {
-        logger.log(`✅ [Telegram Bot Profile Sync] Bot kısa açıklaması başarıyla güncellendi.`);
+        logger.log(`✅ [ProfileSync] Kısa açıklama güncellendi.`);
       } else {
-        logger.warn(`⚠️ [Telegram Bot Profile Sync] setMyShortDescription uyarısı: ${data.description}`);
+        logger.warn(`⚠️ [ProfileSync] setMyShortDescription: ${data.description}`);
       }
     } catch (err: any) {
-      logger.warn(`⚠️ [Telegram Bot Profile Sync] setMyShortDescription hatası: ${err.message}`);
+      logger.warn(`⚠️ [ProfileSync] setMyShortDescription error: ${err.message}`);
     }
   }
 
-  // 3. setMyProfilePhoto (Profil Fotoğrafı)
-  // Telegram Bot API 7.0+ requires InputProfilePhotoStatic format:
-  //   multipart/form-data with field "bot_profile_photo" (the file)
-  //   plus JSON field "photo" = { "type": "static", "photo": "attach://bot_profile_photo" }
+  // 3. setMyProfilePhoto - 3 farklı yöntem sırayla denenir
   if (brand.botPhotoUrl && brand.botPhotoUrl.trim() !== '') {
-    try {
-      let photoBuffer: Buffer;
-      let contentType = 'image/jpeg';
+    let photoBuffer: Buffer | null = null;
+    let contentType = 'image/jpeg';
+    const photoUrl = brand.botPhotoUrl.trim();
 
-      // Base64 Data URI veya HTTP URL desteği
-      if (brand.botPhotoUrl.startsWith('data:image/')) {
-        const parts = brand.botPhotoUrl.split(';base64,');
+    // Fotoğrafı hazırla (Base64 veya URL)
+    try {
+      if (photoUrl.startsWith('data:image/')) {
+        // Base64 Data URI
+        const parts = photoUrl.split(';base64,');
         contentType = parts[0].replace('data:', '');
         photoBuffer = Buffer.from(parts[1], 'base64');
+        logger.log(`[ProfileSync] Fotoğraf kaynağı: base64 (${photoBuffer.length} bytes, ${contentType})`);
       } else {
-        const imgRes = await fetch(brand.botPhotoUrl);
-        if (imgRes.ok) {
-          const arrayBuffer = await imgRes.arrayBuffer();
-          photoBuffer = Buffer.from(arrayBuffer);
-          contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+        // HTTP URL - indir
+        logger.log(`[ProfileSync] Fotoğraf indiriliyor: ${photoUrl}`);
+        const imgRes = await fetch(photoUrl, { signal: AbortSignal.timeout(15000) });
+        if (!imgRes.ok) {
+          logger.warn(`⚠️ [ProfileSync] Fotoğraf indirilemedi: HTTP ${imgRes.status}`);
         } else {
-          logger.warn(`⚠️ [Telegram Bot Profile Sync] Profil fotoğrafı URL'sinden resim indirilemedi: ${brand.botPhotoUrl}`);
-          return;
+          const ab = await imgRes.arrayBuffer();
+          photoBuffer = Buffer.from(ab);
+          contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+          logger.log(`[ProfileSync] Fotoğraf indirildi: ${photoBuffer.length} bytes, ${contentType}`);
         }
       }
+    } catch (prepErr: any) {
+      logger.warn(`⚠️ [ProfileSync] Fotoğraf hazırlanırken hata: ${prepErr.message}`);
+    }
 
-      // Telegram Bot API 7.0+ gereksinimi:
-      // multipart/form-data: "bot_profile_photo" = dosya, "photo" = JSON objesi
+    if (!photoBuffer || photoBuffer.length === 0) {
+      logger.warn(`⚠️ [ProfileSync] Fotoğraf buffer boş, atlanıyor.`);
+      return;
+    }
+
+    // YÖNTEM A: InputProfilePhotoStatic - Bot API 7.0+ (multipart + attach://)
+    let photoUpdated = false;
+    try {
+      logger.log(`[ProfileSync] Yöntem A: InputProfilePhotoStatic (Bot API 7.0+)...`);
       const formData = new FormData();
-      const blob = new Blob([new Uint8Array(photoBuffer)], { type: contentType });
-
-      // Dosyayı "bot_profile_photo" adıyla ekle
+      const blob = new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' });
       formData.append('bot_profile_photo', blob, 'bot_profile_photo.jpg');
-
-      // InputProfilePhotoStatic objesi: type + attach:// referansı
       formData.append('photo', JSON.stringify({
         type: 'static',
         photo: 'attach://bot_profile_photo',
@@ -98,16 +106,76 @@ export async function syncBotProfileWithBrand(
       const photoRes = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
         method: 'POST',
         body: formData as any,
+        signal: AbortSignal.timeout(30000),
       });
-
       const photoData = (await photoRes.json()) as any;
+      logger.log(`[ProfileSync] Telegram Yanıt (A): ${JSON.stringify(photoData)}`);
+
       if (photoData.ok) {
-        logger.log(`✅ [Telegram Bot Profile Sync] Bot profil fotoğrafı başarıyla Telegram'a yüklendi.`);
+        logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem A).`);
+        photoUpdated = true;
       } else {
-        logger.warn(`⚠️ [Telegram Bot Profile Sync] setMyProfilePhoto uyarısı: ${photoData.description}`);
+        logger.warn(`⚠️ [ProfileSync] Yöntem A başarısız: ${photoData.description}`);
       }
-    } catch (photoErr: any) {
-      logger.warn(`⚠️ [Telegram Bot Profile Sync] Fotoğraf güncellenirken hata: ${photoErr.message}`);
+    } catch (errA: any) {
+      logger.warn(`⚠️ [ProfileSync] Yöntem A error: ${errA.message}`);
+    }
+
+    // YÖNTEM B: Fallback - eski basit multipart (Bot API < 7.0 uyumluluğu)
+    if (!photoUpdated) {
+      try {
+        logger.log(`[ProfileSync] Yöntem B: Basit multipart (fallback)...`);
+        const formDataB = new FormData();
+        const blobB = new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' });
+        formDataB.append('photo', blobB, 'photo.jpg');
+
+        const resB = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+          method: 'POST',
+          body: formDataB as any,
+          signal: AbortSignal.timeout(30000),
+        });
+        const dataB = (await resB.json()) as any;
+        logger.log(`[ProfileSync] Telegram Yanıt (B): ${JSON.stringify(dataB)}`);
+
+        if (dataB.ok) {
+          logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem B).`);
+          photoUpdated = true;
+        } else {
+          logger.warn(`⚠️ [ProfileSync] Yöntem B başarısız: ${dataB.description}`);
+        }
+      } catch (errB: any) {
+        logger.warn(`⚠️ [ProfileSync] Yöntem B error: ${errB.message}`);
+      }
+    }
+
+    // YÖNTEM C: Fallback - URL doğrudan JSON ile gönder (HTTP URL ise)
+    if (!photoUpdated && !photoUrl.startsWith('data:')) {
+      try {
+        logger.log(`[ProfileSync] Yöntem C: Direkt URL JSON...`);
+        const resC = await fetch(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            photo: { type: 'static', photo: photoUrl },
+          }),
+          signal: AbortSignal.timeout(30000),
+        });
+        const dataC = (await resC.json()) as any;
+        logger.log(`[ProfileSync] Telegram Yanıt (C): ${JSON.stringify(dataC)}`);
+
+        if (dataC.ok) {
+          logger.log(`✅ [ProfileSync] Profil fotoğrafı güncellendi (Yöntem C).`);
+          photoUpdated = true;
+        } else {
+          logger.warn(`⚠️ [ProfileSync] Yöntem C başarısız: ${dataC.description}`);
+        }
+      } catch (errC: any) {
+        logger.warn(`⚠️ [ProfileSync] Yöntem C error: ${errC.message}`);
+      }
+    }
+
+    if (!photoUpdated) {
+      logger.error(`❌ [ProfileSync] Tüm yöntemler başarısız - profil fotoğrafı güncellenemedi.`);
     }
   }
 }
