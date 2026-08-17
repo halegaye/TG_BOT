@@ -5,13 +5,25 @@ export interface InlineButtonDto {
 }
 
 /**
- * Validates that button URLs strictly use http:// or https:// schemes.
- * Rejects dangerous protocols like javascript:, data:, file:, etc.
+ * Ensures button URLs have http:// or https:// scheme.
+ * Prepend https:// if protocol is omitted (e.g. t.me/... or site.com).
  */
+export function normalizeButtonUrl(rawUrl: string): string | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  let trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('file:')) {
+    return null;
+  }
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    trimmed = `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 export function validateInlineButtonUrl(url: string): boolean {
-  if (!url || typeof url !== 'string') return false;
-  const trimmed = url.trim().toLowerCase();
-  return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  const normalized = normalizeButtonUrl(url);
+  return normalized !== null;
 }
 
 /**
@@ -25,9 +37,19 @@ export function buildInlineKeyboard(
     return undefined;
   }
 
-  const validButtons = buttons.filter(
-    (btn) => btn && btn.text && validateInlineButtonUrl(btn.url),
-  );
+  const validButtons: Array<{ text: string; url: string; sameRow?: boolean }> = [];
+  for (const btn of buttons) {
+    if (btn && btn.text && btn.text.trim()) {
+      const normalizedUrl = normalizeButtonUrl(btn.url);
+      if (normalizedUrl) {
+        validButtons.push({
+          text: btn.text.trim(),
+          url: normalizedUrl,
+          sameRow: !!btn.sameRow,
+        });
+      }
+    }
+  }
 
   if (validButtons.length === 0) return undefined;
 
@@ -35,7 +57,7 @@ export function buildInlineKeyboard(
   let currentRow: Array<{ text: string; url: string }> = [];
 
   for (const btn of validButtons) {
-    const item = { text: btn.text.trim(), url: btn.url.trim() };
+    const item = { text: btn.text, url: btn.url };
 
     if (btn.sameRow && currentRow.length > 0 && currentRow.length < 8) {
       currentRow.push(item);

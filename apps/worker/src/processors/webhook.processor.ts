@@ -153,13 +153,26 @@ export class WebhookProcessor extends WorkerHost {
           }
         }
 
-        // Eğer bota/şablona ait özel buton yoksa, markanın varsayılan butonlarını kullan
-        if ((!buttons || buttons.length === 0) && bot.brand?.defaultStartButtons) {
+        // Bota/şablona özel geçerli buton var mı kontrol et
+        const botHasValidButtons =
+          Array.isArray(buttons) &&
+          buttons.some((b) => b && b.text && b.text.trim() && b.url && b.url.trim());
+
+        // Eğer bota/şablona özel geçerli buton yoksa, markanın varsayılan butonlarını kullan
+        if (!botHasValidButtons && bot.brand?.defaultStartButtons) {
           const brandBtns = bot.brand.defaultStartButtons as unknown as InlineButtonDto[];
           if (Array.isArray(brandBtns) && brandBtns.length > 0) {
             buttons = brandBtns;
           }
         }
+
+        // Inline Buton matrisini oluştur
+        const replyMarkup = buildInlineKeyboard(buttons);
+
+        this.logger.log(
+          `🔘 [BUTTONS] Bot [${bot.username}] -> Toplam ${buttons.length} adet buton işlendi. ` +
+            `(Markup: ${replyMarkup ? replyMarkup.inline_keyboard.length + ' satır' : 'Buton yok'})`,
+        );
 
         // Template Engine değişken giydirme
         const formattedMessage = interpolateTemplate(rawTemplate, {
@@ -170,9 +183,6 @@ export class WebhookProcessor extends WorkerHost {
           brand_name: bot.brand?.name || '',
           start_parameter: startParam || '',
         });
-
-        // Inline Buton matrisini oluştur
-        const replyMarkup = buildInlineKeyboard(buttons);
 
         let telegramEndpoint = 'sendMessage';
         const payload: any = {
