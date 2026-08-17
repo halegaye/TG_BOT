@@ -9,9 +9,12 @@ export class CampaignScheduleTaskService {
   private redis: Redis;
 
   constructor(private prisma: PrismaService) {
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (err) => {
+      this.logger.warn(`[Redis Connection Guard] Scheduler: ${err.message}`);
     });
   }
 

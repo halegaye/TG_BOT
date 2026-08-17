@@ -18,7 +18,13 @@ export class DeliveryProcessor extends WorkerHost {
     private encryptionService: EncryptionService,
   ) {
     super();
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (err) => {
+      this.logger.warn(`[Redis Connection Guard] DeliveryProcessor: ${err.message}`);
+    });
   }
 
   async process(job: Job<any>): Promise<any> {

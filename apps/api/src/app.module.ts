@@ -16,10 +16,15 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { ProfileModule } from './profile/profile.module';
 
 function parseRedisConnection() {
+  const baseOptions = {
+    maxRetriesPerRequest: null,
+    enableOfflineQueue: false,
+  };
   if (process.env.REDIS_URL) {
     try {
       const url = new URL(process.env.REDIS_URL);
       return {
+        ...baseOptions,
         host: url.hostname,
         port: parseInt(url.port || '6379', 10),
         password: url.password ? decodeURIComponent(url.password) : undefined,
@@ -27,6 +32,7 @@ function parseRedisConnection() {
     } catch (_) {}
   }
   return {
+    ...baseOptions,
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,

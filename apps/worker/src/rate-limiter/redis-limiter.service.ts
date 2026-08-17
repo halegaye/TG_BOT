@@ -6,7 +6,13 @@ export class RedisRateLimiterService implements OnModuleDestroy {
   private redis: Redis;
 
   constructor() {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+    this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+      maxRetriesPerRequest: null,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (err) => {
+      console.warn(`[Redis Connection Guard] RedisRateLimiterService: ${err.message}`);
+    });
   }
 
   async onModuleDestroy() {
