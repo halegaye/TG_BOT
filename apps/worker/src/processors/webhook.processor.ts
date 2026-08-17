@@ -153,16 +153,22 @@ export class WebhookProcessor extends WorkerHost {
           }
         }
 
-        // Bota/şablona özel geçerli buton var mı kontrol et
-        const botHasValidButtons =
-          Array.isArray(buttons) &&
-          buttons.some((b) => b && b.text && b.text.trim() && b.url && b.url.trim());
+        // Markanın varsayılan butonları ayarlanmışsa öncelikli olarak kullan
+        const brandBtns = bot.brand?.defaultStartButtons as unknown as InlineButtonDto[];
+        const hasBrandDefaultButtons =
+          Array.isArray(brandBtns) &&
+          brandBtns.some((b) => b && b.text && b.text.trim() && b.url && b.url.trim());
 
-        // Eğer bota/şablona özel geçerli buton yoksa, markanın varsayılan butonlarını kullan
-        if (!botHasValidButtons && bot.brand?.defaultStartButtons) {
-          const brandBtns = bot.brand.defaultStartButtons as unknown as InlineButtonDto[];
-          if (Array.isArray(brandBtns) && brandBtns.length > 0) {
-            buttons = brandBtns;
+        if (hasBrandDefaultButtons) {
+          buttons = brandBtns;
+        } else {
+          // Markanın varsayılan butonu yoksa bota/şablona özel tanımlı butonları kullan
+          const botHasValidButtons =
+            Array.isArray(buttons) &&
+            buttons.some((b) => b && b.text && b.text.trim() && b.url && b.url.trim());
+
+          if (!botHasValidButtons) {
+            buttons = [];
           }
         }
 
