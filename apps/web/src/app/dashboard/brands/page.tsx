@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchBrands, fetchMe, createBrand, updateBrand, setStoredBrandId, syncBrandBotProfiles, uploadBrandBotPhoto } from '@/lib/api';
-import { Building2, Plus, CheckCircle, Clock, Radio, Users, Bot as BotIcon, Mail, Palette, Image as ImageIcon, Edit2, RefreshCw, Upload, FileText } from 'lucide-react';
+import { Building2, Plus, CheckCircle, Clock, Radio, Users, Bot as BotIcon, Mail, Palette, Image as ImageIcon, Edit2, RefreshCw, Upload, FileText, Layout, Trash2, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
 
 export default function BrandsPage() {
   const queryClient = useQueryClient();
@@ -21,6 +21,8 @@ export default function BrandsPage() {
   const [botShortDescription, setBotShortDescription] = useState('');
   const [botPhotoUrl, setBotPhotoUrl] = useState(''); // Önizleme için (mevcut URL veya base64 preview)
   const [botPhotoFile, setBotPhotoFile] = useState<File | null>(null); // Yeni seçilen dosya
+  const [defaultStartMessage, setDefaultStartMessage] = useState('');
+  const [defaultStartButtons, setDefaultStartButtons] = useState<{ text: string; url: string; sameRow: boolean }[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [syncingBrandId, setSyncingBrandId] = useState<string | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<{ brandId: string; message: string } | null>(null);
@@ -91,6 +93,8 @@ export default function BrandsPage() {
     setBotShortDescription('');
     setBotPhotoUrl('');
     setBotPhotoFile(null);
+    setDefaultStartMessage('');
+    setDefaultStartButtons([]);
     setError('');
   };
 
@@ -125,6 +129,8 @@ export default function BrandsPage() {
       botDescription,
       botShortDescription,
       botPhotoUrl,
+      defaultStartMessage,
+      defaultStartButtons,
     });
   };
 
@@ -143,6 +149,8 @@ export default function BrandsPage() {
       adminEmail,
       botDescription,
       botShortDescription,
+      defaultStartMessage,
+      defaultStartButtons,
       // botPhotoUrl base64 ise gönderme (ayrı upload yapılacak)
       ...(botPhotoUrl && !botPhotoUrl.startsWith('data:') && { botPhotoUrl }),
     });
@@ -174,6 +182,8 @@ export default function BrandsPage() {
     setBotDescription(brand.botDescription || '');
     setBotShortDescription(brand.botShortDescription || '');
     setBotPhotoUrl(brand.botPhotoUrl || '');
+    setDefaultStartMessage(brand.defaultStartMessage || '');
+    setDefaultStartButtons(Array.isArray(brand.defaultStartButtons) ? brand.defaultStartButtons : []);
     setError('');
   };
 
@@ -436,6 +446,204 @@ export default function BrandsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* BRAND DEFAULT /START MESSAGE & BUTTON LAYOUT BUILDER */}
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 space-y-4">
+                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                    <Layout className="h-4 w-4" />
+                    Marka Botları Varsayılan /start Butonları & Düzeni
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDefaultStartButtons([
+                        ...defaultStartButtons,
+                        { text: '', url: '', sameRow: defaultStartButtons.length > 0 },
+                      ])
+                    }
+                    className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition shadow"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Buton Ekle
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200">
+                    Varsayılan /start Metni (İsteğe Bağlı)
+                  </label>
+                  <p className="text-[11px] text-slate-400 mb-1">
+                    Bota özel karşılama mesajı ayarlanmamışsa bu metin gönderilir. (Değişkenler: &#123;&#123;first_name&#125;&#125;, &#123;&#123;bot_name&#125;&#125;)
+                  </p>
+                  <textarea
+                    rows={2}
+                    value={defaultStartMessage}
+                    onChange={(e) => setDefaultStartMessage(e.target.value)}
+                    placeholder="Merhaba {{first_name}}! {{bot_name}} botuna hoş geldiniz. Aşağıdaki butonlardan işlem yapabilirsiniz 👇"
+                    className="w-full rounded-lg bg-slate-950 py-2 px-3 text-xs text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Buton Listesi & Düzenleyici */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-semibold text-slate-200">
+                    Buton Matrisi (Yan Yana / Alt Alta Düzen)
+                  </label>
+
+                  {defaultStartButtons.length === 0 ? (
+                    <div className="text-center py-4 text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                      Henüz varsayılan buton eklenmedi. "Buton Ekle" butonuna tıklayarak ekleyebilirsiniz.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {defaultStartButtons.map((btn, idx) => (
+                        <div
+                          key={idx}
+                          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs"
+                        >
+                          <span className="w-5 text-center text-slate-500 font-mono font-bold flex-shrink-0">
+                            #{idx + 1}
+                          </span>
+
+                          <input
+                            type="text"
+                            value={btn.text}
+                            onChange={(e) => {
+                              const updated = [...defaultStartButtons];
+                              updated[idx].text = e.target.value;
+                              setDefaultStartButtons(updated);
+                            }}
+                            placeholder="Buton Başlığı (örn: Siteye Giriş 🚀)"
+                            className="flex-1 rounded-md bg-slate-900 px-2.5 py-1.5 text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
+                          />
+
+                          <input
+                            type="text"
+                            value={btn.url}
+                            onChange={(e) => {
+                              const updated = [...defaultStartButtons];
+                              updated[idx].url = e.target.value;
+                              setDefaultStartButtons(updated);
+                            }}
+                            placeholder="https://..."
+                            className="flex-1 font-mono text-[11px] rounded-md bg-slate-900 px-2.5 py-1.5 text-white border border-slate-700 focus:border-emerald-500 focus:outline-none"
+                          />
+
+                          {/* Yan Yana / Alt Alta Düzen Seçimi Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...defaultStartButtons];
+                              updated[idx].sameRow = !updated[idx].sameRow;
+                              setDefaultStartButtons(updated);
+                            }}
+                            title={
+                              btn.sameRow
+                                ? 'Önceki buton ile aynı satırda yan yana durur'
+                                : 'Yeni bir satıra geçip alt alta durur'
+                            }
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md font-semibold text-[11px] transition border ${
+                              idx === 0
+                                ? 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed'
+                                : btn.sameRow
+                                ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                                : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            }`}
+                            disabled={idx === 0}
+                          >
+                            {idx === 0
+                              ? 'İlk Satır'
+                              : btn.sameRow
+                              ? '⬅️ Yan Yana (Aynı Satır)'
+                              : '⬇️ Alt Alta (Yeni Satır)'}
+                          </button>
+
+                          {/* Yukarı/Aşağı ve Sil Butonları */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                if (idx === 0) return;
+                                const updated = [...defaultStartButtons];
+                                const temp = updated[idx - 1];
+                                updated[idx - 1] = updated[idx];
+                                updated[idx] = temp;
+                                setDefaultStartButtons(updated);
+                              }}
+                              className="p-1 rounded bg-slate-900 text-slate-400 hover:text-white disabled:opacity-30"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === defaultStartButtons.length - 1}
+                              onClick={() => {
+                                if (idx === defaultStartButtons.length - 1) return;
+                                const updated = [...defaultStartButtons];
+                                const temp = updated[idx + 1];
+                                updated[idx + 1] = updated[idx];
+                                updated[idx] = temp;
+                                setDefaultStartButtons(updated);
+                              }}
+                              className="p-1 rounded bg-slate-900 text-slate-400 hover:text-white disabled:opacity-30"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = defaultStartButtons.filter((_, i) => i !== idx);
+                                setDefaultStartButtons(updated);
+                              }}
+                              className="p-1 rounded bg-red-950 text-red-400 hover:bg-red-900 transition"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* CANLI TELEGRAM BUTON DÜZENİ ÖNİZLEMESİ */}
+                {defaultStartButtons.length > 0 && (
+                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                    <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider flex items-center justify-between">
+                      <span>📱 Telegram Canlı Buton Görünümü Önizlemesi</span>
+                      <span className="text-emerald-400 font-mono">{defaultStartButtons.length} Buton</span>
+                    </div>
+
+                    <div className="space-y-1.5 p-3 rounded-xl bg-[#0e1621] border border-slate-800 shadow-inner">
+                      {(() => {
+                        const rows: typeof defaultStartButtons[] = [];
+                        defaultStartButtons.forEach((btn) => {
+                          if (btn.sameRow && rows.length > 0 && rows[rows.length - 1].length < 8) {
+                            rows[rows.length - 1].push(btn);
+                          } else {
+                            rows.push([btn]);
+                          }
+                        });
+
+                        return rows.map((row, rIdx) => (
+                          <div key={rIdx} className="flex items-center gap-1.5">
+                            {row.map((btn, bIdx) => (
+                              <div
+                                key={bIdx}
+                                className="flex-1 flex items-center justify-center gap-1 py-2 px-3 rounded-lg bg-[#2b5278] hover:bg-[#326290] text-white text-xs font-medium shadow truncate transition"
+                              >
+                                <span className="truncate">{btn.text || 'Buton Metni'}</span>
+                                <ExternalLink className="h-3 w-3 text-slate-300 flex-shrink-0" />
+                              </div>
+                            ))}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

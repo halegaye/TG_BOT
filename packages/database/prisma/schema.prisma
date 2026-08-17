@@ -72,6 +72,8 @@ model Brand {
   botDescription          String?
   botShortDescription     String?
   botPhotoUrl             String?
+  defaultStartMessage     String?
+  defaultStartButtons     Json?
   isActive                Boolean           @default(true)
   createdAt               DateTime          @default(now())
   updatedAt               DateTime          @updatedAt

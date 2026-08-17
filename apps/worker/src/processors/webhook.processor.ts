@@ -108,7 +108,11 @@ export class WebhookProcessor extends WorkerHost {
           return;
         }
 
-        let rawTemplate = bot.startMessage || `Merhaba {{first_name}}! 👋\n{{bot_name}} botuna hoş geldiniz.`;
+        let rawTemplate =
+          bot.startMessage ||
+          bot.brand?.defaultStartMessage ||
+          bot.brand?.botDescription ||
+          `Merhaba {{first_name}}! 👋\n{{bot_name}} botuna hoş geldiniz.`;
         let parseModeToUse = bot.startParseMode || 'HTML';
         let buttons = (bot.buttonsJson as unknown as InlineButtonDto[]) || [];
         let mediaType = 'NONE';
@@ -146,6 +150,14 @@ export class WebhookProcessor extends WorkerHost {
             if (dbTemplate.buttonsJson && Array.isArray(dbTemplate.buttonsJson)) {
               buttons = dbTemplate.buttonsJson as any[];
             }
+          }
+        }
+
+        // Eğer bota/şablona ait özel buton yoksa, markanın varsayılan butonlarını kullan
+        if ((!buttons || buttons.length === 0) && bot.brand?.defaultStartButtons) {
+          const brandBtns = bot.brand.defaultStartButtons as unknown as InlineButtonDto[];
+          if (Array.isArray(brandBtns) && brandBtns.length > 0) {
+            buttons = brandBtns;
           }
         }
 

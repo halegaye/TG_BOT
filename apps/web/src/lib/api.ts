@@ -100,6 +100,8 @@ export async function createBrand(data: {
   botDescription?: string;
   botShortDescription?: string;
   botPhotoUrl?: string;
+  defaultStartMessage?: string;
+  defaultStartButtons?: any[];
   adminEmail?: string;
 }) {
   return fetchApi('/api/v1/brands', {
@@ -118,6 +120,8 @@ export async function updateBrand(
     botDescription?: string;
     botShortDescription?: string;
     botPhotoUrl?: string;
+    defaultStartMessage?: string;
+    defaultStartButtons?: any[];
     adminEmail?: string;
   },
 ) {

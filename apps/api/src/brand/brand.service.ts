@@ -35,6 +35,8 @@ export class BrandService {
     botDescription?: string;
     botShortDescription?: string;
     botPhotoUrl?: string;
+    defaultStartMessage?: string;
+    defaultStartButtons?: any[];
     adminEmail?: string;
   }) {
     const existing = await this.prisma.brand.findUnique({
@@ -57,6 +59,8 @@ export class BrandService {
         botDescription: data.botDescription || null,
         botShortDescription: data.botShortDescription || null,
         botPhotoUrl: data.botPhotoUrl || null,
+        defaultStartMessage: data.defaultStartMessage || null,
+        defaultStartButtons: data.defaultStartButtons ? (data.defaultStartButtons as any) : undefined,
       },
     });
 
@@ -86,6 +90,8 @@ export class BrandService {
       botDescription?: string;
       botShortDescription?: string;
       botPhotoUrl?: string;
+      defaultStartMessage?: string;
+      defaultStartButtons?: any[];
       adminEmail?: string;
     },
     user?: any,
@@ -111,6 +117,8 @@ export class BrandService {
         ...(data.botDescription !== undefined && { botDescription: data.botDescription }),
         ...(data.botShortDescription !== undefined && { botShortDescription: data.botShortDescription }),
         ...(data.botPhotoUrl !== undefined && { botPhotoUrl: data.botPhotoUrl }),
+        ...(data.defaultStartMessage !== undefined && { defaultStartMessage: data.defaultStartMessage }),
+        ...(data.defaultStartButtons !== undefined && { defaultStartButtons: data.defaultStartButtons as any }),
       },
     });
 

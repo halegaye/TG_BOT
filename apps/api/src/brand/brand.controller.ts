@@ -29,6 +29,8 @@ export class BrandController {
       botDescription?: string;
       botShortDescription?: string;
       botPhotoUrl?: string;
+      defaultStartMessage?: string;
+      defaultStartButtons?: any[];
       adminEmail?: string;
     },
   ) {
@@ -52,6 +54,8 @@ export class BrandController {
       botDescription?: string;
       botShortDescription?: string;
       botPhotoUrl?: string;
+      defaultStartMessage?: string;
+      defaultStartButtons?: any[];
       adminEmail?: string;
     },
   ) {
