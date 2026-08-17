@@ -1,22 +1,19 @@
 import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient } from '@tg-bot/database';
+import { PrismaService } from '../prisma.service';
 import { HashService } from './hash.service';
 import { TwoFactorService } from './two-factor.service';
 import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
-  private prisma: PrismaClient;
-
   constructor(
+    private prisma: PrismaService,
     private hashService: HashService,
     private twoFactorService: TwoFactorService,
     private mailService: MailService,
     private jwtService: JwtService,
-  ) {
-    this.prisma = new PrismaClient();
-  }
+  ) {}
 
   async validateUser(identifier: string, pass: string) {
     const user = await this.prisma.panelUser.findFirst({

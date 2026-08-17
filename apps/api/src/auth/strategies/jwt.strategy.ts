@@ -8,13 +8,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
         (req) => {
           let token = null;
-          if (req && req.cookies) {
+          if (req && req.cookies && req.cookies['access_token']) {
             token = req.cookies['access_token'];
-          }
-          if (!token) {
-            token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
           }
           if (!token && req && req.query && req.query.token) {
             token = req.query.token as string;
@@ -23,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         },
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'super-secret-key-change-in-production',
+      secretOrKey: process.env.JWT_SECRET || 'jwt_super_secret_key_change_this_2026',
     });
   }
 
