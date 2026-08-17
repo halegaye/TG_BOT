@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchBrands, fetchMe, createBrand, updateBrand, setStoredBrandId, syncBrandBotProfiles } from '@/lib/api';
+import { fetchBrands, fetchMe, createBrand, updateBrand, setStoredBrandId, syncBrandBotProfiles, uploadBrandBotPhoto } from '@/lib/api';
 import { Building2, Plus, CheckCircle, Clock, Radio, Users, Bot as BotIcon, Mail, Palette, Image as ImageIcon, Edit2, RefreshCw, Upload, FileText } from 'lucide-react';
 
 export default function BrandsPage() {
@@ -19,7 +19,9 @@ export default function BrandsPage() {
   const [adminEmail, setAdminEmail] = useState('');
   const [botDescription, setBotDescription] = useState('');
   const [botShortDescription, setBotShortDescription] = useState('');
-  const [botPhotoUrl, setBotPhotoUrl] = useState('');
+  const [botPhotoUrl, setBotPhotoUrl] = useState(''); // Önizleme için (mevcut URL veya base64 preview)
+  const [botPhotoFile, setBotPhotoFile] = useState<File | null>(null); // Yeni seçilen dosya
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [syncingBrandId, setSyncingBrandId] = useState<string | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<{ brandId: string; message: string } | null>(null);
   const [error, setError] = useState('');
@@ -88,6 +90,7 @@ export default function BrandsPage() {
     setBotDescription('');
     setBotShortDescription('');
     setBotPhotoUrl('');
+    setBotPhotoFile(null);
     setError('');
   };
 
@@ -98,10 +101,10 @@ export default function BrandsPage() {
         setError('Resim boyutu maksimum 5MB olmalıdır.');
         return;
       }
+      // Sadece önizleme için base64 okuyoruz, upload ayrı yapılacak
+      setBotPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setBotPhotoUrl(reader.result as string);
-      };
+      reader.onloadend = () => setBotPhotoUrl(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -125,9 +128,12 @@ export default function BrandsPage() {
     });
   };
 
-  const handleEditBrandSubmit = (e: React.FormEvent) => {
+  const handleEditBrandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBrand) return;
+    setError('');
+
+    // 1. Marka bilgilerini güncelle (fotoğraf hariç)
     updateBrandMutation.mutate({
       id: editingBrand.id,
       name,
@@ -137,8 +143,24 @@ export default function BrandsPage() {
       adminEmail,
       botDescription,
       botShortDescription,
-      botPhotoUrl,
+      // botPhotoUrl base64 ise gönderme (ayrı upload yapılacak)
+      ...(botPhotoUrl && !botPhotoUrl.startsWith('data:') && { botPhotoUrl }),
     });
+
+    // 2. Yeni dosya seçildiyse ayrı multipart endpoint'e yükle
+    if (botPhotoFile) {
+      setIsUploadingPhoto(true);
+      try {
+        const res = await uploadBrandBotPhoto(editingBrand.id, botPhotoFile);
+        setSyncFeedback({ brandId: editingBrand.id, message: res.message || 'Profil fotoğrafı güncellendi!' });
+        setTimeout(() => setSyncFeedback(null), 5000);
+      } catch (err: any) {
+        setError('Fotoğraf yükleme hatası: ' + (err.message || 'Bilinmeyen hata'));
+      } finally {
+        setIsUploadingPhoto(false);
+        setBotPhotoFile(null);
+      }
+    }
   };
 
   const openEditModal = (brand: any) => {

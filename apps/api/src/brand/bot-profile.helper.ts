@@ -190,3 +190,58 @@ export async function syncBotProfileWithBrand(
     }
   }
 }
+
+/**
+ * Raw Buffer'ı doğrudan Telegram Bot API'ye yükler.
+ * Multipart upload endpoint'inden çağrılır — JSON body limitini bypass eder.
+ */
+export async function syncBotPhotoBuffer(rawToken: string, photoBuffer: Buffer, mime: string): Promise<void> {
+  if (!rawToken || !photoBuffer || photoBuffer.length === 0) return;
+
+  logger.log(`[PhotoUpload] Başlatılıyor: ${photoBuffer.length} bytes, token: ${rawToken.slice(0, 10)}...`);
+
+  // YÖNTEM A: InputProfilePhotoStatic (Bot API 7.0+)
+  try {
+    const fd = new FormData();
+    fd.append('bot_profile_photo', new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' }), 'photo.jpg');
+    fd.append('photo', JSON.stringify({ type: 'static', photo: 'attach://bot_profile_photo' }));
+
+    const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+      method: 'POST',
+      body: fd as any,
+    });
+    const data = (await res.json()) as any;
+    logger.log(`[PhotoUpload] Telegram yanıt (A): ${JSON.stringify(data)}`);
+
+    if (data.ok) {
+      logger.log(`✅ [PhotoUpload] Profil fotoğrafı güncellendi (Yöntem A).`);
+      return;
+    }
+    logger.warn(`⚠️ [PhotoUpload] Yöntem A: [${data.error_code}] ${data.description}`);
+  } catch (err: any) {
+    logger.warn(`⚠️ [PhotoUpload] Yöntem A exception: ${err.message}`);
+  }
+
+  // YÖNTEM B: Eski basit multipart
+  try {
+    const fd2 = new FormData();
+    fd2.append('photo', new Blob([new Uint8Array(photoBuffer)], { type: 'image/jpeg' }), 'photo.jpg');
+
+    const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyProfilePhoto`, {
+      method: 'POST',
+      body: fd2 as any,
+    });
+    const data = (await res.json()) as any;
+    logger.log(`[PhotoUpload] Telegram yanıt (B): ${JSON.stringify(data)}`);
+
+    if (data.ok) {
+      logger.log(`✅ [PhotoUpload] Profil fotoğrafı güncellendi (Yöntem B).`);
+      return;
+    }
+    logger.warn(`⚠️ [PhotoUpload] Yöntem B: [${data.error_code}] ${data.description}`);
+  } catch (err: any) {
+    logger.warn(`⚠️ [PhotoUpload] Yöntem B exception: ${err.message}`);
+  }
+
+  logger.error(`❌ [PhotoUpload] Tüm yöntemler başarısız.`);
+}

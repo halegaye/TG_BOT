@@ -1,4 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller, Post, Param, UseGuards, Request,
+  UseInterceptors, UploadedFile, BadRequestException, Get, Patch, Delete, Body,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { BrandService } from './brand.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../auth/guards/rbac.guard';
@@ -59,6 +63,33 @@ export class BrandController {
   @Post(':id/sync-bot-profiles')
   async syncBrandBotProfiles(@Request() req: any, @Param('id') id: string) {
     return this.brandService.syncBrandBotProfiles(id, req.user);
+  }
+
+  /**
+   * Bot profil fotoğrafını doğrudan multipart/form-data olarak yükle ve Telegram'a gönder.
+   * Body limit sorununu tamamen bypass eder — dosya stream olarak gelir.
+   */
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.BRAND_ADMIN)
+  @Post(':id/upload-bot-photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      limits: { fileSize: 6 * 1024 * 1024 }, // 6MB max
+      fileFilter: (_req: any, file: any, cb: any) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return cb(new BadRequestException('Sadece resim dosyaları yüklenebilir.'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadBotPhoto(
+    @Request() req: any,
+    @Param('id') brandId: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
+  ) {
+    if (!file) throw new BadRequestException('Dosya bulunamadı.');
+    return this.brandService.uploadAndSyncBotPhoto(brandId, file.buffer, file.mimetype, req.user);
   }
 
   @UseGuards(JwtAuthGuard, RbacGuard)

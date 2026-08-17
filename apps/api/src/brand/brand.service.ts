@@ -2,7 +2,7 @@ import { Injectable, ConflictException, NotFoundException, BadRequestException, 
 import { PrismaService } from '../prisma.service';
 import { Role } from '@tg-bot/database';
 import { EncryptionService } from '@tg-bot/shared';
-import { syncBotProfileWithBrand } from './bot-profile.helper';
+import { syncBotProfileWithBrand, syncBotPhotoBuffer } from './bot-profile.helper';
 import * as argon2 from 'argon2';
 
 @Injectable()
@@ -165,6 +165,51 @@ export class BrandService {
       success: true,
       syncedCount,
       message: `${syncedCount} adet botun açıklamaları ve profil fotoğrafı Telegram'a başarıyla senkronize edildi.`,
+    };
+  }
+
+  /**
+   * Multipart olarak gelen fotoğraf buffer'ını Telegram'a doğrudan gönderir.
+   * JSON body size limitini tamamen bypass eder.
+   */
+  async uploadAndSyncBotPhoto(brandId: string, photoBuffer: Buffer, mime: string, user?: any) {
+    this.checkBrandAccess(brandId, user);
+
+    const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
+    if (!brand) throw new NotFoundException('Marka bulunamadı.');
+
+    const activeBots = await this.prisma.telegramBot.findMany({ where: { brandId } });
+    if (activeBots.length === 0) {
+      return { success: true, syncedCount: 0, message: 'Bu markaya ait bot bulunamadı.' };
+    }
+
+    // Base64 olarak DB'ye kaydet (sonraki sync'lerde de kullanılsın)
+    const base64DataUri = `data:${mime};base64,${photoBuffer.toString('base64')}`;
+    await this.prisma.brand.update({
+      where: { id: brandId },
+      data: { botPhotoUrl: base64DataUri },
+    });
+
+    let syncedCount = 0;
+    const errors: string[] = [];
+
+    for (const bot of activeBots) {
+      try {
+        const rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+        await syncBotPhotoBuffer(rawToken, photoBuffer, mime);
+        syncedCount++;
+      } catch (err: any) {
+        errors.push(`@${bot.username}: ${err.message}`);
+        console.warn(`[Upload Bot Photo Error] Bot @${bot.username}: ${err.message}`);
+      }
+    }
+
+    return {
+      success: syncedCount > 0,
+      syncedCount,
+      message: syncedCount > 0
+        ? `${syncedCount} botun profil fotoğrafı başarıyla güncellendi.`
+        : `Fotoğraf güncellenemedi: ${errors.join(', ')}`,
     };
   }
 

@@ -121,10 +121,42 @@ export async function updateBrand(
     adminEmail?: string;
   },
 ) {
+  // botPhotoUrl base64 ise JSON body'den çıkar (ayrı upload endpoint'i kullanılmalı)
+  const { botPhotoUrl, ...rest } = data;
+  const bodyData = botPhotoUrl && botPhotoUrl.startsWith('data:') ? rest : data;
   return fetchApi(`/api/v1/brands/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    body: JSON.stringify(bodyData),
   });
+}
+
+/**
+ * Bot profil fotoğrafını multipart/form-data olarak ayrı endpoint'e yükler.
+ * Base64 JSON body limit sorununu tamamen bypass eder.
+ */
+export async function uploadBrandBotPhoto(brandId: string, file: File): Promise<any> {
+  const token = getStoredToken();
+  const brandId2 = getStoredBrandId();
+  const baseUrl = getApiBaseUrl();
+
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (brandId2) headers['x-brand-id'] = brandId2;
+
+  const res = await fetch(`${baseUrl}/brands/${brandId}/upload-bot-photo`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function syncBrandBotProfiles(brandId: string) {
