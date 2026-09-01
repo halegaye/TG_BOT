@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 const logger = new Logger('BotProfileSync');
 
 export interface BrandBotProfile {
+  name?: string | null;
   botDescription?: string | null;
   botShortDescription?: string | null;
   botPhotoUrl?: string | null;
@@ -54,13 +55,29 @@ async function resolvePhotoBuffer(photoUrl: string): Promise<{ buffer: Buffer; m
 }
 
 /**
- * Telegram Bot API'ye bağlanarak botun açıklama ve profil fotoğrafını senkronize eder.
+ * Telegram Bot API'ye bağlanarak botun adı, açıklama ve profil fotoğrafını senkronize eder.
  */
 export async function syncBotProfileWithBrand(
   rawToken: string,
   brand: BrandBotProfile,
 ) {
   if (!rawToken) return;
+
+  // 0. setMyName
+  if (brand.name?.trim()) {
+    try {
+      const res = await fetchWithTimeout(`https://api.telegram.org/bot${rawToken}/setMyName`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: brand.name.trim() }),
+      });
+      const data = (await res.json()) as any;
+      if (data.ok) logger.log(`✅ [ProfileSync] Bot ismi güncellendi (${brand.name.trim()}).`);
+      else logger.warn(`⚠️ [ProfileSync] setMyName: ${data.description}`);
+    } catch (err: any) {
+      logger.warn(`⚠️ [ProfileSync] setMyName error: ${err.message}`);
+    }
+  }
 
   // 1. setMyDescription
   if (brand.botDescription?.trim()) {

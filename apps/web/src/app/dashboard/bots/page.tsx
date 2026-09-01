@@ -527,13 +527,13 @@ export default function BotsPage() {
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                    Bot Ekran Adı (DisplayName)
+                    Bot Adı (Telegram'da Görünecek İsim - setMyName)
                   </label>
                   <input
                     type="text"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Örn: VIP Müşteri Destek Botu"
+                    placeholder="Örn: Kartalbet Canlı Destek Botu"
                     className="mt-1 w-full rounded-lg bg-slate-950 py-2.5 px-3 text-sm text-white border border-slate-700 focus:border-sky-500 focus:outline-none"
                   />
                 </div>

@@ -291,16 +291,13 @@ export class BotService {
       },
     });
 
-    // Markaya ait profil fotoğrafı ve açıklaması varsa Telegram API ile bot profilini otomatik senkronize et
-    const brand = await this.prisma.brand.findUnique({ where: { id: effectiveBrandId } });
-    if (brand && (brand.botDescription || brand.botShortDescription || brand.botPhotoUrl)) {
+    // Bota özel isim verilmişse Telegram API ile senkronize et (setMyName)
+    if (displayName && displayName.trim()) {
       syncBotProfileWithBrand(cleanToken, {
-        botDescription: brand.botDescription,
-        botShortDescription: brand.botShortDescription,
-        botPhotoUrl: brand.botPhotoUrl,
+        name: displayName.trim(),
       }).catch((err) => {
         this.logger.warn(
-          `[Auto Sync Bot Profile Warning] Yeni bot @${botInfo.username} profili senkronize edilemedi: ${err.message}`,
+          `[Auto Sync Bot Name Warning] Yeni bot @${botInfo.username} ismi senkronize edilemedi: ${err.message}`,
         );
       });
     }
@@ -409,11 +406,16 @@ export class BotService {
       data: dataToUpdate,
     });
 
-    // Eğer bota özel açıklama, kısa açıklama veya profil fotoğrafı verilmişse Telegram API ile senkronize et
+    // Eğer bota özel isim, açıklama, kısa açıklama veya profil fotoğrafı verilmişse Telegram API ile senkronize et
     try {
       const rawToken = this.encryptionService.decrypt(updated.encryptedToken, updated.tokenIV);
-      if (dto.shortDescription !== undefined || dto.botPhotoUrl !== undefined) {
+      if (
+        dto.displayName !== undefined ||
+        dto.shortDescription !== undefined ||
+        dto.botPhotoUrl !== undefined
+      ) {
         syncBotProfileWithBrand(rawToken, {
+          name: updated.displayName,
           botShortDescription: updated.shortDescription,
           botPhotoUrl: updated.botPhotoUrl,
         }).catch((err) => {
