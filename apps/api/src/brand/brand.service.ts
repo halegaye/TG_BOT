@@ -160,8 +160,6 @@ export class BrandService {
         const rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
         await syncBotProfileWithBrand(rawToken, {
           botDescription: brand.botDescription,
-          botShortDescription: brand.botShortDescription,
-          botPhotoUrl: brand.botPhotoUrl,
         });
         syncedCount++;
       } catch (err: any) {

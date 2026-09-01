@@ -388,15 +388,17 @@ export default function BrandsPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-200">
-                    Bot Genel Açıklaması (setMyDescription)
+                    Sohbet İlk Açılış Açıklaması (setMyDescription - Şirket Ortak)
                   </label>
-                  <p className="text-[11px] text-slate-400 mb-1">Kullanıcı botu Telegram'da ilk kez açtığında gösterilen detaylı açıklama metni</p>
+                  <p className="text-[11px] text-slate-400 mb-1">
+                    Kullanıcı bota ilk tıkladığında sohbet penceresinde karşılayan açıklama metni. Şirkete bağlı tüm botlarda ortak görünür.
+                  </p>
                   <textarea
                     rows={2}
                     value={botDescription}
                     onChange={(e) => setBotDescription(e.target.value)}
-                    placeholder="Hoş geldiniz! Resmî müşteri hizmetleri ve kampanya duyuru botudur."
-                    className="w-full rounded-lg bg-slate-950 py-2 px-3 text-xs text-white border border-slate-700 focus:border-sky-500 focus:outline-none"
+                    placeholder="Kartalbet Resmi Telegram Destek ve Duyuru Botuna Hoş Geldiniz..."
+                    className="w-full rounded-lg bg-slate-950 p-2 text-xs text-white border border-slate-700 focus:border-sky-500 focus:outline-none"
                   />
                 </div>
 
@@ -445,6 +447,10 @@ export default function BrandsPage() {
                       />
                     </div>
                   </div>
+                </div>
+                
+                <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800 text-[11px] text-slate-400">
+                  💡 <strong className="text-sky-300">Bot Profil Resmi & Kısa Açıklama Notu:</strong> Her botun kendi profil resmi ve kısa özetini <strong>Botlar (/dashboard/bots)</strong> sayfasındaki ✏️ Düzenle butonundan tekil olarak yönetebilirsiniz. Marka güncellendiğinde botların özel profil resimleri asla bozulmaz.
                 </div>
               </div>
 

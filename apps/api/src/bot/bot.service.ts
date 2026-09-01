@@ -13,7 +13,7 @@ import { EncryptionService } from '../common/encryption.service';
 import { InlineButtonDto, validateInlineButtonUrl } from '@tg-bot/shared';
 import { Role, BotStatus } from '@tg-bot/database';
 import { Redis } from 'ioredis';
-import { syncBotProfileWithBrand } from '../brand/bot-profile.helper';
+import { syncBotProfileWithBrand, syncBotPhotoBuffer } from '../brand/bot-profile.helper';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -101,6 +101,8 @@ export class BotService {
       buttons: bot.buttonsJson,
       disableNotification: bot.disableNotification || false,
       description: bot.description || '',
+      shortDescription: bot.shortDescription || '',
+      botPhotoUrl: bot.botPhotoUrl || '',
       tags: bot.tags || [],
       createdAt: bot.createdAt,
     }));
@@ -160,6 +162,8 @@ export class BotService {
       buttons: bot.buttonsJson,
       disableNotification: bot.disableNotification || false,
       description: bot.description || '',
+      shortDescription: bot.shortDescription || '',
+      botPhotoUrl: bot.botPhotoUrl || '',
       tags: bot.tags || [],
       createdAt: bot.createdAt,
     };
@@ -316,6 +320,8 @@ export class BotService {
       buttons?: InlineButtonDto[];
       disableNotification?: boolean;
       description?: string;
+      shortDescription?: string;
+      botPhotoUrl?: string;
       tags?: string[];
     },
     user: any,
@@ -356,6 +362,8 @@ export class BotService {
     if (dto.startParseMode !== undefined) dataToUpdate.startParseMode = dto.startParseMode;
     if (dto.disableNotification !== undefined) dataToUpdate.disableNotification = dto.disableNotification;
     if (dto.description !== undefined) dataToUpdate.description = dto.description;
+    if (dto.shortDescription !== undefined) dataToUpdate.shortDescription = dto.shortDescription;
+    if (dto.botPhotoUrl !== undefined) dataToUpdate.botPhotoUrl = dto.botPhotoUrl;
     if (dto.tags !== undefined) dataToUpdate.tags = dto.tags;
 
     if (dto.buttons !== undefined) {
@@ -401,7 +409,51 @@ export class BotService {
       data: dataToUpdate,
     });
 
+    // Eğer bota özel açıklama, kısa açıklama veya profil fotoğrafı verilmişse Telegram API ile senkronize et
+    try {
+      const rawToken = this.encryptionService.decrypt(updated.encryptedToken, updated.tokenIV);
+      if (dto.shortDescription !== undefined || dto.botPhotoUrl !== undefined) {
+        syncBotProfileWithBrand(rawToken, {
+          botShortDescription: updated.shortDescription,
+          botPhotoUrl: updated.botPhotoUrl,
+        }).catch((err) => {
+          this.logger.warn(`[Sync Single Bot Profile Warning] Bot @${updated.username}: ${err.message}`);
+        });
+      }
+    } catch (_) {}
+
     return this.getBotById(updated.id);
+  }
+
+  async uploadBotPhoto(botId: string, photoBuffer: Buffer, mime: string, user: any) {
+    const isBigIntId = /^\d+$/.test(botId);
+    const whereCondition = isBigIntId ? { telegramBotId: BigInt(botId) } : { id: botId };
+
+    const bot = await this.prisma.telegramBot.findFirst({ where: whereCondition });
+    if (!bot) throw new NotFoundException('Bot bulunamadı.');
+
+    const isSuperAdmin = user?.memberships?.some((m: any) => m.role === Role.SUPER_ADMIN || m.role === 'SUPER_ADMIN');
+    const isBrandAdmin = user?.memberships?.some(
+      (m: any) => m.brandId === bot.brandId && (m.role === Role.BRAND_ADMIN || m.role === 'BRAND_ADMIN' || m.role === Role.SYSTEM_ADMIN),
+    );
+
+    if (!isSuperAdmin && !isBrandAdmin) {
+      throw new ForbiddenException('Bu botun profil fotoğrafını güncelleme yetkiniz yok.');
+    }
+
+    const base64DataUri = `data:${mime};base64,${photoBuffer.toString('base64')}`;
+    await this.prisma.telegramBot.update({
+      where: { id: bot.id },
+      data: { botPhotoUrl: base64DataUri },
+    });
+
+    const rawToken = this.encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+    await syncBotPhotoBuffer(rawToken, photoBuffer, mime);
+
+    return {
+      success: true,
+      message: `Bot (@${bot.username}) profil fotoğrafı Telegram'a başarıyla yüklendi!`,
+    };
   }
 
   async deleteBot(botId: string, user: any) {

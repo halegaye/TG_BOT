@@ -8,6 +8,7 @@ import {
   fetchBrands,
   registerBot,
   updateBotSettings,
+  uploadBotPhoto,
   queueBulkImportBots,
   fetchBulkImportStatus,
   cancelBulkImport,
@@ -31,6 +32,8 @@ import {
   XCircle,
   Loader2,
   Copy,
+  Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 export default function BotsPage() {
@@ -55,6 +58,9 @@ export default function BotsPage() {
   const [buttons, setButtons] = useState<Array<{ text: string; url: string; sameRow?: boolean }>>([]);
   const [disableNotification, setDisableNotification] = useState(false);
   const [description, setDescription] = useState('');
+  const [shortDescription, setShortDescription] = useState('');
+  const [botPhotoUrl, setBotPhotoUrl] = useState('');
+  const [botPhotoFile, setBotPhotoFile] = useState<File | null>(null);
 
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -122,6 +128,9 @@ export default function BotsPage() {
     setButtons([{ text: 'Web Sitemiz 🌐', url: 'https://example.com', sameRow: false }]);
     setDisableNotification(false);
     setDescription('');
+    setShortDescription('');
+    setBotPhotoUrl('');
+    setBotPhotoFile(null);
     setFormError('');
     setFormSuccess('');
     setIsBotModalOpen(true);
@@ -139,6 +148,9 @@ export default function BotsPage() {
     setButtons(Array.isArray(bot.buttons) ? bot.buttons : []);
     setDisableNotification(!!bot.disableNotification);
     setDescription(bot.description || '');
+    setShortDescription(bot.shortDescription || '');
+    setBotPhotoUrl(bot.botPhotoUrl || '');
+    setBotPhotoFile(null);
     setFormError('');
     setFormSuccess('');
     setIsBotModalOpen(true);
@@ -215,7 +227,7 @@ export default function BotsPage() {
     },
   });
 
-  const handleSaveBotForm = (e: React.FormEvent) => {
+  const handleSaveBotForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
@@ -225,7 +237,7 @@ export default function BotsPage() {
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    const payload = {
+    const payload: any = {
       displayName,
       brandId: selectedBrandId,
       status,
@@ -234,21 +246,28 @@ export default function BotsPage() {
       buttons,
       disableNotification,
       description,
+      shortDescription,
+      botPhotoUrl,
       tags: parsedTags,
       ...(token.trim() && { token: token.trim() }),
     };
 
     if (editingBot) {
+      if (botPhotoFile) {
+        try {
+          await uploadBotPhoto(editingBot.id, botPhotoFile);
+        } catch (err: any) {
+          setFormError(`Fotoğraf yüklenirken hata oluştu: ${err.message}`);
+          return;
+        }
+      }
       updateBotMutation.mutate({ botId: editingBot.id, payload });
     } else {
       if (!token.trim()) {
         setFormError('Telegram Bot Token alanı zorunludur.');
         return;
       }
-      registerBotMutation.mutate({
-        token: token.trim(),
-        ...payload,
-      });
+      registerBotMutation.mutate(payload);
     }
   };
 
@@ -598,6 +617,52 @@ export default function BotsPage() {
                   placeholder="Botun kullanım amacı, yetkilileri veya iç notlar..."
                   className="mt-1 w-full rounded-lg bg-slate-950 p-2.5 text-xs text-white border border-slate-700 focus:border-sky-500 focus:outline-none"
                 />
+              </div>
+
+              {/* Bot Profile Details (Individual Bot) */}
+              <div className="bg-sky-950/30 p-4 rounded-xl border border-sky-800/40 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-sky-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                    Bota Özel Profil Fotoğrafı & Kısa Açıklama (Telegram)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Profil Fotoğrafı Yükle / Değiştir
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setBotPhotoFile(file);
+                      }}
+                      className="w-full text-xs text-slate-400 bg-slate-950 p-2 rounded-lg border border-slate-700 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-sky-600 file:text-white"
+                    />
+                    {botPhotoUrl && !botPhotoFile && (
+                      <span className="text-[10px] text-emerald-400 mt-1 block">✓ Mevcut bota özel profil resmi tanımlı</span>
+                    )}
+                    {botPhotoFile && (
+                      <span className="text-[10px] text-sky-400 mt-1 block">✓ Seçildi: {botPhotoFile.name} (Kaydedildiğinde Telegram'a yüklenecektir)</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Kısa Açıklama (setMyShortDescription)
+                    </label>
+                    <input
+                      type="text"
+                      value={shortDescription}
+                      onChange={(e) => setShortDescription(e.target.value)}
+                      placeholder="Örn: Kartalbet Resmi Canlı Destek Botu"
+                      className="w-full rounded-lg bg-slate-950 p-2 text-xs text-white border border-slate-700 focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Start Message & Parse Mode Section */}

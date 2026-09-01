@@ -148,7 +148,9 @@ model TelegramBot {
   startParseMode      String             @default("HTML") // HTML, MDV2
   buttonsJson         Json?              // Inline URL butonları
   disableNotification Boolean            @default(false)  // Sessiz bildirim seçeneği
-  description         String?            // Bot açıklama / not alanı
+  description         String?            // Bot genel açıklama / biyografi alanı (setMyDescription)
+  shortDescription    String?            // Bot kısa açıklama / özet alanı (setMyShortDescription)
+  botPhotoUrl         String?            // Bota özel profil fotoğrafı URL / Base64 (setMyProfilePhoto)
   tags                String[]           @default([])     // Bot grupları / etiketleri
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt

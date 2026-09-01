@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Request, Res, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { BotService } from './bot.service';
 import { BotHealthService } from './bot-health.service';
@@ -149,10 +150,30 @@ export class BotController {
       buttons?: InlineButtonDto[];
       disableNotification?: boolean;
       description?: string;
+      shortDescription?: string;
+      botPhotoUrl?: string;
       tags?: string[];
     },
   ) {
     return this.botService.updateBot(botId, body, req.user);
+  }
+
+  @UseGuards(JwtAuthGuard, RbacGuard)
+  @Roles(Role.SUPER_ADMIN, Role.BRAND_ADMIN, Role.SYSTEM_ADMIN)
+  @Post(':id/upload-photo')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBotPhoto(
+    @Request() req: any,
+    @Param('id') botId: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; size: number },
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Lütfen yüklenecek bir resim dosyası seçin.');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('Resim boyutu maksimum 5MB olabilir.');
+    }
+    return this.botService.uploadBotPhoto(botId, file.buffer, file.mimetype, req.user);
   }
 
   @UseGuards(JwtAuthGuard, RbacGuard)

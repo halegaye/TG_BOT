@@ -231,13 +231,48 @@ export async function updateBotSettings(
     buttons?: any[];
     disableNotification?: boolean;
     description?: string;
+    shortDescription?: string;
+    botPhotoUrl?: string;
     tags?: string[];
   },
 ) {
+  // botPhotoUrl base64 ise JSON body'den çıkar (ayrı upload endpoint'i kullanılmalı)
+  const { botPhotoUrl, ...rest } = data;
+  const bodyData = botPhotoUrl && botPhotoUrl.startsWith('data:') ? rest : data;
   return fetchApi(`/api/v1/bots/${botId}`, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    body: JSON.stringify(bodyData),
   });
+}
+
+export async function uploadBotPhoto(botId: string, file: File): Promise<any> {
+  const token = getStoredToken();
+  const brandId = getStoredBrandId();
+  const baseUrl = getApiBaseUrl();
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (brandId) headers['x-brand-id'] = brandId;
+
+  const res = await fetch(`${baseUrl}/bots/${botId}/upload-photo`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const errorJson = await res.json();
+      errorMsg = errorJson.message || errorJson.error || errorMsg;
+    } catch (_) {}
+    throw new Error(errorMsg);
+  }
+
+  return res.json();
 }
 
 export async function queueBulkImportBots(data: {
