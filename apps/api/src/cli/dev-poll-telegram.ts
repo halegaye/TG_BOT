@@ -59,53 +59,57 @@ async function startDevPolling() {
         }
       }
 
-      for (const bot of currentActiveBots) {
-        try {
-          const rawToken = encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
-          const offset = botOffsets[bot.id] || 0;
+      await Promise.all(
+        currentActiveBots.map(async (bot) => {
+          try {
+            const rawToken = encryptionService.decrypt(bot.encryptedToken, bot.tokenIV);
+            const offset = botOffsets[bot.id] || 0;
 
-          const res = await fetch(`https://api.telegram.org/bot${rawToken}/getUpdates?offset=${offset}&timeout=2`, {
-            method: 'GET',
-          });
+            const res = await fetch(`https://api.telegram.org/bot${rawToken}/getUpdates?offset=${offset}&timeout=0`, {
+              method: 'GET',
+            });
 
-          const data = (await res.json()) as any;
+            const data = (await res.json()) as any;
 
-          if (data.ok && Array.isArray(data.result) && data.result.length > 0) {
-            for (const update of data.result) {
-              botOffsets[bot.id] = update.update_id + 1;
+            if (data.ok && Array.isArray(data.result) && data.result.length > 0) {
+              for (const update of data.result) {
+                botOffsets[bot.id] = update.update_id + 1;
 
-              console.log(`📥 [GELEN CANLI TELEGRAM MESAJI] Bot [@${bot.username}] -> Update ID: ${update.update_id}, Gönderen: ${update.message?.from?.first_name || 'Bilinmiyor'}, Metin: "${update.message?.text || ''}"`);
+                console.log(
+                  `📥 [GELEN CANLI TELEGRAM MESAJI] Bot [@${bot.username}] -> Update ID: ${update.update_id}, Gönderen: ${update.message?.from?.first_name || 'Bilinmiyor'}, Metin: "${update.message?.text || ''}"`,
+                );
 
-              // Yerel Webhook Endpoint'ine ilet
-              try {
-                const forwardRes = await fetch(`${API_LOCAL_URL}/webhook/${bot.webhookPathSecret}`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-telegram-bot-api-secret-token': bot.webhookHeaderSecret,
-                  },
-                  body: JSON.stringify(update),
-                });
+                // Yerel Webhook Endpoint'ine ilet
+                try {
+                  const forwardRes = await fetch(`${API_LOCAL_URL}/webhook/${bot.webhookPathSecret}`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-telegram-bot-api-secret-token': bot.webhookHeaderSecret,
+                    },
+                    body: JSON.stringify(update),
+                  });
 
-                if (forwardRes.ok) {
-                  console.log(`🚀 [İLETİLDİ] Update başarıyla yerel BullMQ kuyruğuna iletildi!`);
-                } else {
-                  console.error(`❌ Yerel API'ye iletme hatası: ${forwardRes.statusText}`);
+                  if (forwardRes.ok) {
+                    console.log(`🚀 [İLETİLDİ] Update başarıyla yerel BullMQ kuyruğuna iletildi!`);
+                  } else {
+                    console.error(`❌ Yerel API'ye iletme hatası: ${forwardRes.statusText}`);
+                  }
+                } catch (fErr: any) {
+                  console.error(`❌ Yerel API bağlantı hatası (${API_LOCAL_URL}): ${fErr.message}`);
                 }
-              } catch (fErr: any) {
-                console.error(`❌ Yerel API bağlantı hatası (${API_LOCAL_URL}): ${fErr.message}`);
               }
             }
+          } catch (err: any) {
+            // Geçici ağ hatalarını yut
           }
-        } catch (err: any) {
-          // Geçici ağ hatalarını yut
-        }
-      }
+        }),
+      );
     } catch (dbErr: any) {
       console.error('❌ Polling DB hatası:', dbErr.message);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
 }
 
