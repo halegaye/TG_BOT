@@ -11,7 +11,10 @@ export class CampaignScheduleTaskService {
   constructor(private prisma: PrismaService) {
     this.redis = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
       maxRetriesPerRequest: null,
-      enableOfflineQueue: false,
+      enableReadyCheck: false,
+      retryStrategy(times: number) {
+        return Math.min(times * 100, 3000);
+      },
     });
     this.redis.on('error', (err) => {
       this.logger.warn(`[Redis Connection Guard] Scheduler: ${err.message}`);

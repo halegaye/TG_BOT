@@ -10,7 +10,10 @@ import { EncryptionService } from '@tg-bot/shared';
 function parseRedisConnection() {
   const baseOptions = {
     maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
+    enableReadyCheck: false,
+    retryStrategy(times: number) {
+      return Math.min(times * 100, 3000);
+    },
   };
   if (process.env.REDIS_URL) {
     try {

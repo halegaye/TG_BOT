@@ -14,4 +14,4 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app ./
 EXPOSE 4000
-CMD ["pnpm", "--filter", "@tg-bot/api", "start"]
+CMD ["sh", "-c", "pnpm --filter @tg-bot/database exec prisma db push && pnpm --filter @tg-bot/api start"]
